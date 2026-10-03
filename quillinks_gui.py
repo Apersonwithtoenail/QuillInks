@@ -6,6 +6,7 @@ import os
 import platform
 import re
 import sys
+import syntax_highlight
 import tkinter as tk
 import tkinter.font as tkfont
 from datetime import datetime
@@ -172,6 +173,7 @@ THEMES = {
     "everforest":      ("#2d353b", "#d3c6aa", "#d3c6aa", "#475258", "#232a2e", "#7a8478", "#232a2e", "#d3c6aa"),
     "rose-pine":       ("#191724", "#e0def4", "#e0def4", "#403d52", "#1f1d2e", "#6e6a86", "#1f1d2e", "#e0def4"),
 
+    "vintage-brown":   ("#2b2118", "#e8d5b7", "#d4a373", "#6b4423", "#1f1810", "#8b7355", "#3d2b1f", "#e8d5b7"),
 }
 
 SYNTAX_COLORS = {
@@ -195,7 +197,31 @@ SYNTAX_COLORS = {
     "everforest":      ("#e67e80", "#a7c080", "#7a8478", "#d699b6", "#dbbc7f"),
     "rose-pine":       ("#c4a7e7", "#f6c177", "#6e6a86", "#eb6f92", "#9ccfd8"),
 
+    "vintage-brown":   ("#d4a373", "#9b7653", "#7a6a55", "#b8956a", "#c9a961"),
 }
+
+# Extra UI styling for themes that change the whole mood.
+# Only "vintage-brown" is customized; everything else uses defaults.
+UI_EXTRAS = {
+    "vintage-brown": {
+        "toolbar_bg":     "#3d2b1f",
+        "menubar_bg":     "#3d2b1f",
+        "menubar_fg":     "#e8d5b7",
+        "menubar_hover":  "#5a3d29",
+        "menubar_active": "#6b4423",
+        "menu_bg":        "#2b2118",
+        "menu_fg":        "#e8d5b7",
+        "menu_active_bg": "#6b4423",
+        "menu_active_fg": "#f4e4c1",
+        "simple_btn_bg":  "#8b4513",
+        "simple_btn_fg":  "#f4e4c1",
+        "simple_btn_hover": "#a0551f",
+        "status_bg":      "#3d2b1f",
+        "status_fg":      "#d4a373",
+        "font_hint":      "serif",  # used for menubar button font
+    },
+}
+
 
 
 SYNTAX_COLORS = {
@@ -1157,11 +1183,69 @@ class QuillinksGUI:
 
     # ==================== theme ====================
 
+    def _style_ui(self):
+        """Apply theme-specific chrome styling: toolbar, menubar, buttons, menus."""
+        extras = UI_EXTRAS.get(self._theme)
+        bg, fg, ins, sel, gbg, gfg, sbg, sfg = THEMES.get(self._theme, THEMES["dark"])
+
+        if extras is None:
+            # default chrome
+            if hasattr(self, "_toolbar"):
+                try: self._toolbar.config(bg="#2d2d2d")
+                except Exception: pass
+            if hasattr(self, "simple_btn"):
+                if getattr(self, "_simple_mode", False):
+                    self.simple_btn.config(
+                        bg="#2E7D5B", fg="#ffffff",
+                        activebackground="#3a9670", activeforeground="#ffffff",
+                        relief="flat", borderwidth=0, font=("Sans", 10, "bold"),
+                    )
+                else:
+                    self.simple_btn.config(
+                        bg="#6C4AB6", fg="#ffffff",
+                        activebackground="#7a5cc6", activeforeground="#ffffff",
+                        relief="flat", borderwidth=0, font=("Sans", 10, "bold"),
+                    )
+            if hasattr(self, "_menus"):
+                for name, (btn, menu) in self._menus.items():
+                    btn.config(bg="#2d2d2d", fg="#d4d4d4",
+                               activebackground="#3d3d3d", activeforeground="#ffffff",
+                               font=("Sans", 10))
+                    menu.config(bg="#2b2b2b", fg="#d4d4d4",
+                                activebackground="#264f78", activeforeground="#ffffff")
+            return
+
+        # ---- vintage-brown chrome ----
+        if hasattr(self, "_toolbar"):
+            try: self._toolbar.config(bg=extras["toolbar_bg"])
+            except Exception: pass
+
+        if hasattr(self, "simple_btn"):
+            self.simple_btn.config(
+                bg=extras["simple_btn_bg"], fg=extras["simple_btn_fg"],
+                activebackground=extras["simple_btn_hover"],
+                activeforeground=extras["simple_btn_fg"],
+                relief="raised", borderwidth=1,
+                font=(extras["font_hint"], 10, "bold"),
+            )
+
+        if hasattr(self, "_menus"):
+            for name, (btn, menu) in self._menus.items():
+                btn.config(bg=extras["menubar_bg"], fg=extras["menubar_fg"],
+                           activebackground=extras["menubar_hover"],
+                           activeforeground=extras["menubar_active"],
+                           font=(extras["font_hint"], 10))
+                menu.config(bg=extras["menu_bg"], fg=extras["menu_fg"],
+                            activebackground=extras["menu_active_bg"],
+                            activeforeground=extras["menu_active_fg"],
+                            font=(extras["font_hint"], 10))
+
     def _apply_theme(self):
         for tab in self.tabs:
             self._apply_theme_to_tab(tab)
         bg, fg, ins, sel, gbg, gfg, sbg, sfg = THEMES.get(self._theme, THEMES["dark"])
         self.status.config(bg=sbg, fg=sfg)
+        self._style_ui()
 
     def _apply_theme_to_tab(self, tab):
         bg, fg, ins, sel, gbg, gfg, sbg, sfg = THEMES.get(self._theme, THEMES["dark"])
