@@ -779,8 +779,13 @@ class QuillinksGUI:
         self.notebook.pack(fill="both", expand=True)
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_switch)
 
-        self.status = tk.Label(self.root, anchor="w", padx=6)
-        self.status.pack(fill="x", side="bottom")
+        # Status bar: container + thin rim light + text label
+        self._status_container = tk.Frame(self.root, bg="#2d2d2d")
+        self._status_container.pack(fill="x", side="bottom")
+        self._status_rim = tk.Frame(self._status_container, height=1, bg="#555555")
+        self._status_rim.pack(fill="x")
+        self.status = tk.Label(self._status_container, anchor="w", padx=6)
+        self.status.pack(fill="x")
 
         # Global bindings
         self.root.bind("<Control-n>", lambda e: self.new_tab())
@@ -1360,6 +1365,68 @@ class QuillinksGUI:
 
     # ==================== theme ====================
 
+    def _setup_ttk_style(self):
+        """Theme ttk widgets (Notebook tabs, Scrollbars)."""
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        bg, fg, ins, sel, gbg, gfg, sbg, sfg = THEMES.get(self._theme, THEMES["dark"])
+        extras = UI_EXTRAS.get(self._theme)
+        toolbar_bg = extras["toolbar_bg"] if extras else "#2d2d2d"
+        active_bg = extras["simple_btn_bg"] if extras else ins
+
+        # --- Notebook (tabs) ---
+        try:
+            style.configure("TNotebook",
+                            background=bg,
+                            borderwidth=0,
+                            tabmargins=(6, 4, 6, 0))
+            style.configure("TNotebook.Tab",
+                            background=sbg,
+                            foreground=sfg,
+                            padding=(16, 7),
+                            borderwidth=0,
+                            focuscolor=bg,
+                            font=("Sans", 10))
+            style.map("TNotebook.Tab",
+                      background=[("selected", bg), ("active", gbg), ("!selected", sbg)],
+                      foreground=[("selected", fg), ("active", fg), ("!selected", sfg)],
+                      expand=[("selected", (0, 0, 0, 0))])
+        except Exception:
+            pass
+
+        # --- Scrollbar ---
+        try:
+            style.configure("Vertical.TScrollbar",
+                            background=sbg,
+                            troughcolor=bg,
+                            bordercolor=bg,
+                            darkcolor=sbg,
+                            lightcolor=sbg,
+                            arrowcolor=fg,
+                            arrowsize=0,
+                            borderwidth=0,
+                            width=10)
+            style.configure("Horizontal.TScrollbar",
+                            background=sbg,
+                            troughcolor=bg,
+                            bordercolor=bg,
+                            darkcolor=sbg,
+                            lightcolor=sbg,
+                            arrowcolor=fg,
+                            arrowsize=0,
+                            borderwidth=0,
+                            height=10)
+            style.map("Vertical.TScrollbar",
+                      background=[("active", gbg), ("pressed", active_bg), ("!active", sbg)])
+            style.map("Horizontal.TScrollbar",
+                      background=[("active", gbg), ("pressed", active_bg), ("!active", sbg)])
+        except Exception:
+            pass
+
     def _style_ui(self):
         """Apply theme-specific chrome styling: toolbar, menubar, buttons, menus."""
         extras = UI_EXTRAS.get(self._theme)
@@ -1376,7 +1443,9 @@ class QuillinksGUI:
                 for name, (btn, menu) in self._menus.items():
                     btn.config(bg="#2d2d2d", fg="#d4d4d4",
                                activebackground="#3d3d3d", activeforeground="#ffffff",
-                               font=("Sans", 10))
+                               font=("Sans", 10),
+                               relief="flat", borderwidth=0, padx=12, pady=6,
+                               highlightthickness=0)
                     menu.config(bg="#2b2b2b", fg="#d4d4d4",
                                 activebackground="#264f78", activeforeground="#ffffff")
             return
@@ -1394,7 +1463,9 @@ class QuillinksGUI:
                 btn.config(bg=extras["menubar_bg"], fg=extras["menubar_fg"],
                            activebackground=extras["menubar_hover"],
                            activeforeground=extras["menubar_active"],
-                           font=(extras["font_hint"], 10))
+                           font=(extras["font_hint"], 10),
+                           relief="flat", borderwidth=0, padx=12, pady=6,
+                           highlightthickness=0)
                 menu.config(bg=extras["menu_bg"], fg=extras["menu_fg"],
                             activebackground=extras["menu_active_bg"],
                             activeforeground=extras["menu_active_fg"],
@@ -1404,7 +1475,17 @@ class QuillinksGUI:
         for tab in self.tabs:
             self._apply_theme_to_tab(tab)
         bg, fg, ins, sel, gbg, gfg, sbg, sfg = THEMES.get(self._theme, THEMES["dark"])
+        extras = UI_EXTRAS.get(self._theme)
+
+        # Status bar: label + container + rim
         self.status.config(bg=sbg, fg=sfg)
+        try:
+            self._status_container.config(bg=sbg)
+            self._status_rim.config(bg=(extras["menubar_hover"] if extras else "#555555"))
+        except Exception:
+            pass
+
+        self._setup_ttk_style()
         self._style_ui()
 
     def _apply_theme_to_tab(self, tab):
