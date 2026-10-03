@@ -58,7 +58,9 @@ def open_plugin_manager(root, on_change=None):
     status.pack()
 
     def installed_ids():
-        return {p.stem for p in PLUGINS_DIR.glob("*.py")}
+        # Hide plugin_manager.py itself — it's the manager, not a user plugin
+        skip = {"plugin_manager", "__init__"}
+        return {p.stem for p in PLUGINS_DIR.glob("*.py") if p.stem not in skip}
 
     def rebuild():
         for c in inner.winfo_children():
@@ -142,8 +144,14 @@ def open_plugin_manager(root, on_change=None):
                         except Exception: pass
                     rebuild()
                 except Exception as e:
-                    status.config(text=f"Failed: {e}")
-                    messagebox.showerror("Install failed", str(e))
+                    try:
+                        status.config(text=f"Failed: {e}")
+                    except tk.TclError:
+                        pass
+                    try:
+                        messagebox.showerror("Install failed", str(e))
+                    except tk.TclError:
+                        pass
 
             tk.Button(row, text="Install", command=install,
                       bg="#1d4a5a", fg="#cceeff", activebackground="#2d6a8a",
