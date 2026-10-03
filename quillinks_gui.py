@@ -557,6 +557,129 @@ class Tab:
 
 # ==================== Main app ====================
 
+class AerogelButton(tk.Canvas):
+    """Rounded glass-effect button with animated hover transition."""
+
+    def __init__(self, parent, text, command,
+                 base_color="#6C4AB6", hover_color="#7a5cc6",
+                 fg_color="#ffffff", width=150, height=30):
+        bg_of_parent = parent.cget("bg") if hasattr(parent, "cget") else "#2d2d2d"
+        super().__init__(parent, width=width, height=height,
+                          bg=bg_of_parent, highlightthickness=0, borderwidth=0,
+                          cursor="hand2")
+        self.text = text
+        self.command = command
+        self.base_color = base_color
+        self.hover_color = hover_color
+        self.fg_color = fg_color
+        self.w = width
+        self.h = height
+        self._current = base_color
+        self._target = base_color
+        self._hover = False
+        self._anim = None
+        self._draw()
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_click)
+
+    # --- public API used by theme system ---
+    def set_text(self, text):
+        self.text = text
+        self._draw()
+
+    def set_colors(self, base=None, hover=None, fg=None, parent_bg=None):
+        if base is not None: self.base_color = base
+        if hover is not None: self.hover_color = hover
+        if fg is not None: self.fg_color = fg
+        if parent_bg is not None:
+            try: self.config(bg=parent_bg)
+            except Exception: pass
+        if not self._hover:
+            self._current = self.base_color
+            self._target = self.base_color
+        self._draw()
+
+    # --- drawing ---
+    def _draw(self):
+        self.delete("all")
+        r = self.h // 2   # pill shape
+        self._round_rect(0, 0, self.w, self.h, r, fill=self._current, outline="")
+        # top sheen — lighter rounded band covering top 45%
+        sheen = self._lighten(self._current, 0.18)
+        self._round_rect(1, 1, self.w - 1, int(self.h * 0.55), r - 1,
+                          fill=sheen, outline="")
+        # outer border — very subtle
+        border = self._lighten(self._current, 0.35)
+        self._round_rect(0, 0, self.w - 1, self.h - 1, r,
+                          fill="", outline=border, width=1)
+        # text, centered, offset up 1px for optical centering
+        self.create_text(self.w // 2, self.h // 2,
+                          text=self.text, fill=self.fg_color,
+                          font=("Sans", 10, "bold"))
+
+    def _round_rect(self, x1, y1, x2, y2, r, **kwargs):
+        pts = [
+            x1+r, y1, x1+r, y1, x2-r, y1, x2-r, y1, x2, y1,
+            x2, y1+r, x2, y1+r, x2, y2-r, x2, y2-r, x2, y2,
+            x2-r, y2, x2-r, y2, x1+r, y2, x1+r, y2, x1, y2,
+            x1, y2-r, x1, y2-r, x1, y1+r, x1, y1+r, x1, y1,
+        ]
+        return self.create_polygon(pts, smooth=True, **kwargs)
+
+    @staticmethod
+    def _hex_to_rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+    @staticmethod
+    def _rgb_to_hex(rgb):
+        return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+    def _lighten(self, color, amount):
+        r, g, b = self._hex_to_rgb(color)
+        r = min(255, int(r + (255 - r) * amount))
+        g = min(255, int(g + (255 - g) * amount))
+        b = min(255, int(b + (255 - b) * amount))
+        return self._rgb_to_hex((r, g, b))
+
+    # --- events ---
+    def _on_enter(self, _e):
+        self._hover = True
+        self._animate_to(self.hover_color)
+
+    def _on_leave(self, _e):
+        self._hover = False
+        self._animate_to(self.base_color)
+
+    def _on_click(self, _e):
+        if self.command:
+            self.command()
+
+    def _animate_to(self, target_hex):
+        if self._anim:
+            try: self.after_cancel(self._anim)
+            except Exception: pass
+        steps = 10
+        start = self._hex_to_rgb(self._current)
+        end = self._hex_to_rgb(target_hex)
+
+        def step(i):
+            if i > steps:
+                self._current = target_hex
+                self._draw()
+                return
+            t = i / steps
+            r = int(start[0] + (end[0] - start[0]) * t)
+            g = int(start[1] + (end[1] - start[1]) * t)
+            b = int(start[2] + (end[2] - start[2]) * t)
+            self._current = self._rgb_to_hex((r, g, b))
+            self._draw()
+            self._anim = self.after(15, lambda: step(i + 1))
+
+        step(0)
+
+
 class QuillinksGUI:
     def __init__(self, path=None):
         self.settings = _load_settings()
@@ -590,22 +713,16 @@ class QuillinksGUI:
         self._topbar.pack(fill="x", side="top")
         self._topbar.pack_propagate(False)
 
-        self.simple_btn = tk.Button(
+        self.simple_btn = AerogelButton(
             self._topbar,
             text="◀ Simple Mode",
             command=self.toggle_simple_mode,
-            relief="flat",
-            borderwidth=0,
-            padx=14,
-            pady=2,
-            cursor="hand2",
-            font=("Sans", 10, "bold"),
-            bg="#6C4AB6",
-            fg="#ffffff",
-            activebackground="#7a5cc6",
-            activeforeground="#ffffff",
+            base_color="#6C4AB6",
+            hover_color="#7a5cc6",
+            fg_color="#ffffff",
+            width=150, height=26,
         )
-        self.simple_btn.pack(side="right", padx=8, pady=3)
+        self.simple_btn.pack(side="right", padx=8, pady=4)
 
         self._build_menu()
 
@@ -859,10 +976,23 @@ class QuillinksGUI:
     def _update_simple_button(self):
         if not hasattr(self, "simple_btn"):
             return
+        extras = UI_EXTRAS.get(self._theme)
         if self._simple_mode:
-            self.simple_btn.config(text="▶ Full Mode", bg="#2E7D5B", activebackground="#3a9670")
+            self.simple_btn.set_text("▶ Full Mode")
+            if extras is None:
+                self.simple_btn.set_colors("#2E7D5B", "#3a9670", "#ffffff")
+            else:
+                self.simple_btn.set_colors("#4a6741", "#5a7a4d", extras["simple_btn_fg"])
         else:
-            self.simple_btn.config(text="◀ Simple Mode", bg="#6C4AB6", activebackground="#7a5cc6")
+            self.simple_btn.set_text("◀ Simple Mode")
+            if extras is None:
+                self.simple_btn.set_colors("#6C4AB6", "#7a5cc6", "#ffffff")
+            else:
+                self.simple_btn.set_colors(
+                    extras["simple_btn_bg"],
+                    extras["simple_btn_hover"],
+                    extras["simple_btn_fg"],
+                )
 
     def _build_menu(self):
         """Rebuild the custom menu bar on the top toolbar."""
@@ -1194,18 +1324,7 @@ class QuillinksGUI:
                 try: self._toolbar.config(bg="#2d2d2d")
                 except Exception: pass
             if hasattr(self, "simple_btn"):
-                if getattr(self, "_simple_mode", False):
-                    self.simple_btn.config(
-                        bg="#2E7D5B", fg="#ffffff",
-                        activebackground="#3a9670", activeforeground="#ffffff",
-                        relief="flat", borderwidth=0, font=("Sans", 10, "bold"),
-                    )
-                else:
-                    self.simple_btn.config(
-                        bg="#6C4AB6", fg="#ffffff",
-                        activebackground="#7a5cc6", activeforeground="#ffffff",
-                        relief="flat", borderwidth=0, font=("Sans", 10, "bold"),
-                    )
+                self._update_simple_button()
             if hasattr(self, "_menus"):
                 for name, (btn, menu) in self._menus.items():
                     btn.config(bg="#2d2d2d", fg="#d4d4d4",
@@ -1221,13 +1340,7 @@ class QuillinksGUI:
             except Exception: pass
 
         if hasattr(self, "simple_btn"):
-            self.simple_btn.config(
-                bg=extras["simple_btn_bg"], fg=extras["simple_btn_fg"],
-                activebackground=extras["simple_btn_hover"],
-                activeforeground=extras["simple_btn_fg"],
-                relief="raised", borderwidth=1,
-                font=(extras["font_hint"], 10, "bold"),
-            )
+            self._update_simple_button()
 
         if hasattr(self, "_menus"):
             for name, (btn, menu) in self._menus.items():
