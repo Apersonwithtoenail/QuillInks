@@ -64,13 +64,31 @@ Both share the same features and shortcuts.
 
 ## Install
 
-### GUI (recommended for desktop)
+### Linux
+Tkinter is included with Python:
 
     git clone https://github.com/Apersonwithtoenail/QuillInks.git
     cd QuillInks
     python3 quillinks_gui.py
 
-Tkinter ships with Python — no dependencies to install.
+### Windows
+Install Python from [python.org](https://www.python.org/downloads/) (Tkinter is bundled), then:
+
+    git clone https://github.com/Apersonwithtoenail/QuillInks.git
+    cd QuillInks
+    python quillinks_gui.py
+
+Config lives at `%APPDATA%\Quillinks\`.
+
+### macOS
+Tkinter needs to be installed separately:
+
+    brew install python-tk
+    git clone https://github.com/Apersonwithtoenail/QuillInks.git
+    cd QuillInks
+    python3 quillinks_gui.py
+
+Config lives at `~/Library/Application Support/Quillinks/`.
 
 ### TUI (terminal)
 
