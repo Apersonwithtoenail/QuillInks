@@ -756,9 +756,12 @@ class QuillinksGUI:
         self._hl_jobs = {}
         self._simple_mode = bool(self.settings.get("simple_mode", False))
 
-        self._topbar = tk.Frame(self.root, bg="#2d2d2d", height=32)
+        self._topbar = tk.Frame(self.root, bg="#2d2d2d", height=34)
         self._topbar.pack(fill="x", side="top")
         self._topbar.pack_propagate(False)
+        # bottom border to separate menu row from tab row
+        self._topbar_rim = tk.Frame(self.root, height=1, bg="#000000")
+        self._topbar_rim.pack(fill="x", side="top")
 
         self.simple_btn = AerogelButton(
             self._topbar,
@@ -1441,11 +1444,13 @@ class QuillinksGUI:
                 self._update_simple_button()
             if hasattr(self, "_menus"):
                 for name, (btn, menu) in self._menus.items():
-                    btn.config(bg="#2d2d2d", fg="#d4d4d4",
+                    btn.config(bg="#2d2d2d", fg="#e0e0e0",
                                activebackground="#3d3d3d", activeforeground="#ffffff",
-                               font=("Sans", 10),
+                               font=("Sans", 10, "bold"),
                                relief="flat", borderwidth=0, padx=12, pady=6,
-                               highlightthickness=0)
+                               highlightthickness=1,
+                               highlightbackground="#3d3d3d",
+                               highlightcolor="#ffffff")
                     menu.config(bg="#2b2b2b", fg="#d4d4d4",
                                 activebackground="#264f78", activeforeground="#ffffff")
             return
@@ -1460,12 +1465,14 @@ class QuillinksGUI:
 
         if hasattr(self, "_menus"):
             for name, (btn, menu) in self._menus.items():
-                btn.config(bg=extras["menubar_bg"], fg=extras["menubar_fg"],
+                btn.config(bg=extras["menubar_bg"], fg="#f4e4c1",
                            activebackground=extras["menubar_hover"],
-                           activeforeground=extras["menubar_active"],
-                           font=(extras["font_hint"], 10),
+                           activeforeground="#ffffff",
+                           font=(extras["font_hint"], 10, "bold"),
                            relief="flat", borderwidth=0, padx=12, pady=6,
-                           highlightthickness=0)
+                           highlightthickness=1,
+                           highlightbackground=extras["menubar_hover"],
+                           highlightcolor="#ffffff")
                 menu.config(bg=extras["menu_bg"], fg=extras["menu_fg"],
                             activebackground=extras["menu_active_bg"],
                             activeforeground=extras["menu_active_fg"],
@@ -1482,6 +1489,7 @@ class QuillinksGUI:
         try:
             self._status_container.config(bg=sbg)
             self._status_rim.config(bg=(extras["menubar_hover"] if extras else "#555555"))
+            self._topbar_rim.config(bg=(extras["menu_bg"] if extras else "#0a0a0a"))
         except Exception:
             pass
 
