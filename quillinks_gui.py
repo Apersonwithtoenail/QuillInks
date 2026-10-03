@@ -463,6 +463,7 @@ class QuillinksGUI:
         self.root.geometry(self.settings.get("geometry", "1050x720"))
 
         self.tabs = []
+        self.recent_menu = None
         self._font_size = int(self.settings.get("font_size", 11))
         self._font_family = self.settings.get("font_family", "Monospace")
         self._show_ws = bool(self.settings.get("show_ws", False))
@@ -528,6 +529,7 @@ class QuillinksGUI:
         self.root.bind("<Control-f>", lambda e: self.open_find())
         self.root.bind("<Control-h>", lambda e: self.open_find())
         self.root.bind("<Control-g>", self.goto_line)
+        self.root.bind("<Control-r>", lambda e: self.open_find_regex())
         self.root.bind("<Control-equal>", lambda e: self.zoom(1))
         self.root.bind("<Control-plus>", lambda e: self.zoom(1))
         self.root.bind("<Control-minus>", lambda e: self.zoom(-1))
@@ -657,6 +659,94 @@ class QuillinksGUI:
                     for tag in ("sh_keyword", "sh_string", "sh_comment", "sh_number", "sh_func"):
                         pane.text.tag_remove(tag, "1.0", "end")
 
+    def open_find_regex(self):
+        win = tk.Toplevel(self.root)
+        win.title("Find & Replace (Regex)")
+        win.geometry("540x340")
+        win.transient(self.root)
+        win.configure(bg="#1e1e1e")
+
+        tk.Label(win, text="Pattern (Python regex):", bg="#1e1e1e", fg="#d4d4d4").grid(
+            row=0, column=0, sticky="e", padx=8, pady=6)
+        pat_var = tk.StringVar()
+        tk.Entry(win, textvariable=pat_var, width=40,
+                 bg="#252526", fg="#d4d4d4", insertbackground="#d4d4d4").grid(
+            row=0, column=1, columnspan=2, padx=4, pady=6, sticky="we")
+
+        tk.Label(win, text="Replace (\\1 for group 1):", bg="#1e1e1e", fg="#d4d4d4").grid(
+            row=1, column=0, sticky="e", padx=8, pady=6)
+        repl_var = tk.StringVar()
+        tk.Entry(win, textvariable=repl_var, width=40,
+                 bg="#252526", fg="#d4d4d4", insertbackground="#d4d4d4").grid(
+            row=1, column=1, columnspan=2, padx=4, pady=6, sticky="we")
+
+        case_var = tk.BooleanVar(value=False)
+        dotall_var = tk.BooleanVar(value=False)
+        opts = tk.Frame(win, bg="#1e1e1e")
+        opts.grid(row=2, column=0, columnspan=3, pady=4, sticky="w", padx=8)
+        tk.Checkbutton(opts, text="Case sensitive", variable=case_var,
+                        bg="#1e1e1e", fg="#d4d4d4", selectcolor="#2d2d30",
+                        activebackground="#1e1e1e", activeforeground="#d4d4d4").pack(side="left", padx=6)
+        tk.Checkbutton(opts, text=". matches newline", variable=dotall_var,
+                        bg="#1e1e1e", fg="#d4d4d4", selectcolor="#2d2d30",
+                        activebackground="#1e1e1e", activeforeground="#d4d4d4").pack(side="left", padx=6)
+
+        info = tk.Label(win, text="", bg="#1e1e1e", fg="#4ec9b0", font=("Sans", 9))
+        info.grid(row=3, column=0, columnspan=3, pady=(4, 8))
+
+        def get_flags():
+            f = 0
+            if not case_var.get(): f |= re.IGNORECASE
+            if dotall_var.get(): f |= re.DOTALL
+            return f
+
+        def compile_pat():
+            try:
+                return re.compile(pat_var.get(), get_flags())
+            except re.error as e:
+                info.config(text=f"Bad regex: {e}")
+                return None
+
+        def find_all():
+            rx = compile_pat()
+            if rx is None: return
+            self._clear_highlights()
+            content = self.text.get("1.0", "end-1c")
+            n = 0
+            for m in rx.finditer(content):
+                s = self._char_to_index(content, m.start())
+                e = self._char_to_index(content, m.end())
+                self.text.tag_add("hl", s, e)
+                n += 1
+            self.text.tag_config("hl", background="#5a4a1a")
+            info.config(text=f"{n} match{'es' if n != 1 else ''}")
+
+        def replace_all():
+            rx = compile_pat()
+            if rx is None: return
+            content = self.text.get("1.0", "end-1c")
+            repl = repl_var.get()
+            try:
+                count = len(rx.findall(content))
+                new_content = rx.sub(repl, content)
+            except re.error as e:
+                info.config(text=f"Sub error: {e}")
+                return
+            if count == 0:
+                info.config(text="No matches")
+                return
+            self.text.delete("1.0", "end")
+            self.text.insert("1.0", new_content)
+            info.config(text=f"Replaced {count}")
+
+        btns = tk.Frame(win, bg="#1e1e1e")
+        btns.grid(row=4, column=0, columnspan=3, pady=8)
+        tk.Button(btns, text="Highlight All", command=find_all, width=14).pack(side="left", padx=6)
+        tk.Button(btns, text="Replace All", command=replace_all, width=14).pack(side="left", padx=6)
+        tk.Button(btns, text="Close",
+                   command=lambda: (self._clear_highlights(), win.destroy()),
+                   width=10).pack(side="left", padx=6)
+
     def toggle_simple_mode(self):
         self._simple_mode = not self._simple_mode
         self.settings["simple_mode"] = self._simple_mode
@@ -738,6 +828,7 @@ class QuillinksGUI:
             m.add_command(label="Select All", accelerator="Ctrl+A", command=self.select_all)
             m.add_separator()
             m.add_command(label="Find & Replace…", accelerator="Ctrl+F", command=self.open_find)
+            m.add_command(label="Find with Regex…", accelerator="Ctrl+R", command=self.open_find_regex)
             m.add_command(label="Go to line…", accelerator="Ctrl+G", command=self.goto_line)
 
         def build_edit_full(m):
@@ -1218,6 +1309,8 @@ class QuillinksGUI:
     # ==================== recent ====================
 
     def _rebuild_recent_menu(self):
+        if self.recent_menu is None:
+            return
         self.recent_menu.delete(0, "end")
         items = _load_recent()
         if not items:
