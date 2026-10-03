@@ -1,0 +1,13 @@
+{
+  "plugins": [
+    {
+      "id": "font_picker",
+      "name": "Font Picker",
+      "author": "Apwith",
+      "description": "Browse all system fonts with live preview. Ctrl+Shift+F.",
+      "version": "1.0.0",
+      "file": "font_picker.py",
+      "url": "https://raw.githubusercontent.com/Apersonwithtoenail/QuillInks/main/plugins/font_picker.py"
+    }
+  ]
+}
