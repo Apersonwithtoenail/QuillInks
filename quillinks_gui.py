@@ -558,7 +558,8 @@ class Tab:
 # ==================== Main app ====================
 
 class AerogelButton(tk.Canvas):
-    """Rounded glass-effect button with animated hover transition."""
+    """Windows-Vista-style Aero glass button. Multi-band gradient, rim light,
+    drop-shadow text, animated hover fade."""
 
     def __init__(self, parent, text, command,
                  base_color="#6C4AB6", hover_color="#7a5cc6",
@@ -575,15 +576,14 @@ class AerogelButton(tk.Canvas):
         self.w = width
         self.h = height
         self._current = base_color
-        self._target = base_color
-        self._hover = False
         self._anim = None
+        self._hover = False
         self._draw()
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
         self.bind("<Button-1>", self._on_click)
 
-    # --- public API used by theme system ---
+    # ---- public ----
     def set_text(self, text):
         self.text = text
         self._draw()
@@ -597,26 +597,30 @@ class AerogelButton(tk.Canvas):
             except Exception: pass
         if not self._hover:
             self._current = self.base_color
-            self._target = self.base_color
         self._draw()
 
-    # --- drawing ---
-    def _draw(self):
-        self.delete("all")
-        r = self.h // 2   # pill shape
-        self._round_rect(0, 0, self.w, self.h, r, fill=self._current, outline="")
-        # top sheen — lighter rounded band covering top 45%
-        sheen = self._lighten(self._current, 0.18)
-        self._round_rect(1, 1, self.w - 1, int(self.h * 0.55), r - 1,
-                          fill=sheen, outline="")
-        # outer border — very subtle
-        border = self._lighten(self._current, 0.35)
-        self._round_rect(0, 0, self.w - 1, self.h - 1, r,
-                          fill="", outline=border, width=1)
-        # text, centered, offset up 1px for optical centering
-        self.create_text(self.w // 2, self.h // 2,
-                          text=self.text, fill=self.fg_color,
-                          font=("Sans", 10, "bold"))
+    # ---- helpers ----
+    @staticmethod
+    def _hex_to_rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+    @staticmethod
+    def _rgb_to_hex(rgb):
+        return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+    def _mix(self, color, target_rgb, amount):
+        r, g, b = self._hex_to_rgb(color)
+        r = int(r + (target_rgb[0] - r) * amount)
+        g = int(g + (target_rgb[1] - g) * amount)
+        b = int(b + (target_rgb[2] - b) * amount)
+        return self._rgb_to_hex((r, g, b))
+
+    def _lighten(self, color, amount):
+        return self._mix(color, (255, 255, 255), amount)
+
+    def _darken(self, color, amount):
+        return self._mix(color, (0, 0, 0), amount)
 
     def _round_rect(self, x1, y1, x2, y2, r, **kwargs):
         pts = [
@@ -627,23 +631,63 @@ class AerogelButton(tk.Canvas):
         ]
         return self.create_polygon(pts, smooth=True, **kwargs)
 
-    @staticmethod
-    def _hex_to_rgb(h):
-        h = h.lstrip("#")
-        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+    # ---- drawing ----
+    def _draw(self):
+        self.delete("all")
+        w, h = self.w, self.h
+        r = h // 2
+        base = self._current
 
-    @staticmethod
-    def _rgb_to_hex(rgb):
-        return "#{:02x}{:02x}{:02x}".format(*rgb)
+        # 1. Base pill — solid color
+        self._round_rect(0, 0, w, h, r, fill=base, outline="")
 
-    def _lighten(self, color, amount):
-        r, g, b = self._hex_to_rgb(color)
-        r = min(255, int(r + (255 - r) * amount))
-        g = min(255, int(g + (255 - g) * amount))
-        b = min(255, int(b + (255 - b) * amount))
-        return self._rgb_to_hex((r, g, b))
+        # 2. Vertical gradient — 6 bands from light top to dark bottom
+        #    Splits the pill into horizontal slices. Each slice is a rounded
+        #    rect only on the edges that need to curve.
+        bands = 8
+        for i in range(bands):
+            t = i / (bands - 1)  # 0 top → 1 bottom
+            # interpolate: top is light, middle is base, bottom is dark
+            if t < 0.5:
+                band_color = self._mix(base, (255, 255, 255), (0.5 - t) * 0.65)
+            else:
+                band_color = self._mix(base, (0, 0, 0), (t - 0.5) * 0.45)
+            y1 = int(h * i / bands)
+            y2 = int(h * (i + 1) / bands) + 1
+            # top band → curve the top corners
+            if i == 0:
+                self._round_rect(1, 0, w - 1, y2, r, fill=band_color, outline="")
+            # bottom band → curve the bottom corners
+            elif i == bands - 1:
+                self._round_rect(1, y1, w - 1, h, r, fill=band_color, outline="")
+            else:
+                self.create_rectangle(1, y1, w - 1, y2,
+                                       fill=band_color, outline="")
 
-    # --- events ---
+        # 3. Top rim light — thin bright arc
+        rim_top = self._lighten(base, 0.55)
+        self._round_rect(2, 1, w - 2, int(h * 0.35), r - 2,
+                          fill="", outline=rim_top, width=1)
+
+        # 4. Bottom shadow — thin dark arc
+        rim_bot = self._darken(base, 0.35)
+        self._round_rect(1, int(h * 0.55), w - 1, h - 1, r - 1,
+                          fill="", outline=rim_bot, width=1)
+
+        # 5. Outer border — subtle dark edge
+        outer = self._darken(base, 0.5)
+        self._round_rect(0, 0, w - 1, h - 1, r,
+                          fill="", outline=outer, width=1)
+
+        # 6. Text with drop shadow (1px below)
+        cx, cy = w // 2, h // 2
+        shadow = "#000000"
+        self.create_text(cx + 1, cy + 1, text=self.text, fill=shadow,
+                          font=("Sans", 10, "bold"))
+        self.create_text(cx, cy, text=self.text, fill=self.fg_color,
+                          font=("Sans", 10, "bold"))
+
+    # ---- events ----
     def _on_enter(self, _e):
         self._hover = True
         self._animate_to(self.hover_color)
@@ -660,7 +704,7 @@ class AerogelButton(tk.Canvas):
         if self._anim:
             try: self.after_cancel(self._anim)
             except Exception: pass
-        steps = 10
+        steps = 12
         start = self._hex_to_rgb(self._current)
         end = self._hex_to_rgb(target_hex)
 
@@ -670,14 +714,17 @@ class AerogelButton(tk.Canvas):
                 self._draw()
                 return
             t = i / steps
+            # ease-out for a snappier feel
+            t = 1 - (1 - t) ** 2
             r = int(start[0] + (end[0] - start[0]) * t)
             g = int(start[1] + (end[1] - start[1]) * t)
             b = int(start[2] + (end[2] - start[2]) * t)
             self._current = self._rgb_to_hex((r, g, b))
             self._draw()
-            self._anim = self.after(15, lambda: step(i + 1))
+            self._anim = self.after(12, lambda: step(i + 1))
 
         step(0)
+
 
 
 class QuillinksGUI:
