@@ -394,6 +394,7 @@ class Pane:
     def _post_edit(self, event=None):
         self.app._update_gutter_for_pane(self)
         self.app.update_status()
+        self.app._schedule_syntax(self)
         if self.app._show_ws:
             self.app._paint_ws_for(self)
 
@@ -476,6 +477,32 @@ class QuillinksGUI:
         self._ensure_eof_newline = False
         self._show_ruler = bool(self.settings.get("show_ruler", False))
         self._ruler_col = int(self.settings.get("ruler_col", 80))
+        self._syntax = bool(self.settings.get("syntax_highlight", True))
+        self._hl_jobs = {}
+        self._syntax = bool(self.settings.get("syntax_highlight", True))
+        self._hl_jobs = {}
+        self._simple_mode = bool(self.settings.get("simple_mode", False))
+
+        self._topbar = tk.Frame(self.root, bg="#2d2d2d", height=32)
+        self._topbar.pack(fill="x", side="top")
+        self._topbar.pack_propagate(False)
+
+        self.simple_btn = tk.Button(
+            self._topbar,
+            text="◀ Simple Mode",
+            command=self.toggle_simple_mode,
+            relief="flat",
+            borderwidth=0,
+            padx=14,
+            pady=2,
+            cursor="hand2",
+            font=("Sans", 10, "bold"),
+            bg="#6C4AB6",
+            fg="#ffffff",
+            activebackground="#7a5cc6",
+            activeforeground="#ffffff",
+        )
+        self.simple_btn.pack(side="right", padx=8, pady=3)
 
         self._build_menu()
 
@@ -588,137 +615,233 @@ class QuillinksGUI:
 
     # ==================== menu ====================
 
+    def _apply_syntax_to(self, pane):
+        if not getattr(self, "_syntax", True):
+            return
+        lang = syntax_highlight.detect_language(pane.path)
+        if not lang:
+            return
+        cols = SYNTAX_COLORS.get(self._theme, SYNTAX_COLORS["dark"])
+        kw, st, cm, nu, fu = cols
+        tag_colors = {
+            "sh_keyword": {"foreground": kw},
+            "sh_string": {"foreground": st},
+            "sh_comment": {"foreground": cm, "font": (self._font_family, self._font_size, "italic")},
+            "sh_number": {"foreground": nu},
+            "sh_func": {"foreground": fu},
+        }
+        try:
+            syntax_highlight.highlight(pane.text, lang, tag_colors)
+        except Exception:
+            pass
+
+    def _schedule_syntax(self, pane):
+        if not getattr(self, "_syntax", True):
+            return
+        prev = self._hl_jobs.get(id(pane))
+        if prev is not None:
+            try:
+                pane.text.after_cancel(prev)
+            except Exception:
+                pass
+        self._hl_jobs[id(pane)] = pane.text.after(120, lambda: self._apply_syntax_to(pane))
+
+    def toggle_syntax(self):
+        self._syntax = not self._syntax
+        self.settings["syntax_highlight"] = self._syntax
+        for tab in self.tabs:
+            for pane in tab.panes:
+                if self._syntax:
+                    self._apply_syntax_to(pane)
+                else:
+                    for tag in ("sh_keyword", "sh_string", "sh_comment", "sh_number", "sh_func"):
+                        pane.text.tag_remove(tag, "1.0", "end")
+
+    def toggle_simple_mode(self):
+        self._simple_mode = not self._simple_mode
+        self.settings["simple_mode"] = self._simple_mode
+        self._update_simple_button()
+        self._build_menu()
+        self.status.config(text=f" Simple mode: {'ON' if self._simple_mode else 'OFF'}")
+
+    def _update_simple_button(self):
+        if not hasattr(self, "simple_btn"):
+            return
+        if self._simple_mode:
+            self.simple_btn.config(text="▶ Full Mode", bg="#2E7D5B", activebackground="#3a9670")
+        else:
+            self.simple_btn.config(text="◀ Simple Mode", bg="#6C4AB6", activebackground="#7a5cc6")
+
     def _build_menu(self):
-        menubar = tk.Menu(self.root)
+        """Rebuild the custom menu bar on the top toolbar."""
+        # Destroy existing menu widgets (keep the simple_btn)
+        for child in list(self._topbar.winfo_children()):
+            if child is not self.simple_btn:
+                child.destroy()
 
-        fm = tk.Menu(menubar, tearoff=0)
-        fm.add_command(label="New Tab", accelerator="Ctrl+T", command=self.new_tab)
-        fm.add_command(label="New File", accelerator="Ctrl+N", command=self.new_tab)
-        fm.add_command(label="Open…", accelerator="Ctrl+O", command=self.open_file)
-        fm.add_command(label="Save", accelerator="Ctrl+S", command=self.save_file)
-        fm.add_command(label="Save As…", accelerator="Ctrl+Shift+S", command=self.save_as)
-        fm.add_command(label="Close Tab", accelerator="Ctrl+W", command=self.close_tab)
-        fm.add_command(label="Close Pane", accelerator="Ctrl+Shift+W", command=self.close_pane)
-        fm.add_separator()
-        self.recent_menu = tk.Menu(fm, tearoff=0)
-        fm.add_cascade(label="Open Recent", menu=self.recent_menu)
-        fm.add_separator()
-        fm.add_command(label="Revert", command=self.revert_file)
-        fm.add_separator()
-        le = tk.Menu(fm, tearoff=0)
-        for eol in ["LF", "CRLF", "CR"]:
-            le.add_command(label=eol, command=lambda x=eol: self.set_line_ending(x))
-        fm.add_cascade(label="Line Endings", menu=le)
-        fm.add_checkbutton(label="Ensure trailing newline at EOF",
-                            variable=(eof_var := tk.BooleanVar(value=False)),
-                            command=lambda: setattr(self, "_ensure_eof_newline", eof_var.get()))
-        fm.add_checkbutton(label="Read-Only",
-                            variable=(ro_var := tk.BooleanVar(value=False)),
-                            command=lambda: self.toggle_read_only(ro_var.get()))
-        fm.add_separator()
-        fm.add_command(label="Exit", accelerator="Ctrl+Q", command=self.on_close)
-        menubar.add_cascade(label="File", menu=fm)
+        self._menus = {}
 
-        em = tk.Menu(menubar, tearoff=0)
-        em.add_command(label="Undo", accelerator="Ctrl+Z",
-                       command=lambda: self.text.event_generate("<<Undo>>"))
-        em.add_command(label="Redo", accelerator="Ctrl+Y",
-                       command=lambda: self.text.event_generate("<<Redo>>"))
-        em.add_separator()
-        em.add_command(label="Cut", command=lambda: self.text.event_generate("<<Cut>>"))
-        em.add_command(label="Copy", command=lambda: self.text.event_generate("<<Copy>>"))
-        em.add_command(label="Paste", command=lambda: self.text.event_generate("<<Paste>>"))
-        em.add_command(label="Select All", accelerator="Ctrl+A", command=self.select_all)
-        em.add_separator()
-        em.add_command(label="Duplicate Line", command=self.duplicate_line)
-        em.add_command(label="Delete Line", command=self.delete_line)
-        em.add_command(label="Toggle Comment", command=self.toggle_comment)
-        em.add_separator()
-        em.add_command(label="UPPERCASE", command=self.uppercase_sel)
-        em.add_command(label="lowercase", command=self.lowercase_sel)
-        em.add_command(label="Trim trailing whitespace", command=self.trim_ws)
-        em.add_command(label="Sort lines", command=self.sort_lines)
-        em.add_separator()
-        em.add_command(label="Tabs → Spaces", command=self.convert_tabs_to_spaces)
-        em.add_command(label="Spaces → Tabs", command=self.convert_spaces_to_tabs)
-        em.add_separator()
-        em.add_command(label="Find & Replace…", accelerator="Ctrl+F", command=self.open_find)
-        em.add_command(label="Go to line…", accelerator="Ctrl+G", command=self.goto_line)
-        em.add_command(label="Insert Date/Time", accelerator="F5", command=self.insert_datetime)
-        menubar.add_cascade(label="Edit", menu=em)
+        def add_menu(name, build_fn):
+            btn = tk.Menubutton(
+                self._topbar, text=name, relief="flat", borderwidth=0,
+                bg="#2d2d2d", fg="#d4d4d4",
+                activebackground="#3d3d3d", activeforeground="#ffffff",
+                padx=10, pady=4, font=("Sans", 10),
+            )
+            m = tk.Menu(btn, tearoff=0)
+            btn.config(menu=m)
+            build_fn(m)
+            btn.pack(side="left", padx=0, pady=0)
+            self._menus[name] = (btn, m)
 
-        vm = tk.Menu(menubar, tearoff=0)
-        self.wrap_var = tk.BooleanVar(value=bool(self.settings.get("wrap", False)))
-        vm.add_checkbutton(label="Word Wrap", variable=self.wrap_var, command=self.toggle_wrap)
-        self.ws_var = tk.BooleanVar(value=self._show_ws)
-        vm.add_checkbutton(label="Show Whitespace", variable=self.ws_var, command=self.toggle_whitespace)
-        self.autopair_var = tk.BooleanVar(value=self._autopair)
-        vm.add_checkbutton(label="Auto-pair brackets", variable=self.autopair_var, command=self.toggle_autopair)
-        self.ai_var = tk.BooleanVar(value=self._auto_indent)
-        vm.add_checkbutton(label="Auto-indent", variable=self.ai_var, command=self.toggle_auto_indent)
-        self.bm_var = tk.BooleanVar(value=self._bracket_match)
-        vm.add_checkbutton(label="Bracket matching", variable=self.bm_var, command=self.toggle_bracket_match)
-        self.eol_var = tk.BooleanVar(value=False)
-        vm.add_checkbutton(label="Show EOL markers", variable=self.eol_var, command=self.toggle_eol_markers)
-        self.ruler_var = tk.BooleanVar(value=self._show_ruler)
-        vm.add_checkbutton(label="Column Ruler", variable=self.ruler_var, command=self.toggle_ruler)
-        vm.add_separator()
-        vm.add_command(label="Split Vertical", accelerator="Ctrl+\\", command=self.toggle_split)
-        vm.add_separator()
-        tw = tk.Menu(vm, tearoff=0)
-        for w in [2, 4, 8]:
-            tw.add_command(label=f"{w} spaces", command=lambda x=w: self.set_tab_width(x))
-        vm.add_cascade(label="Tab width", menu=tw)
-        vm.add_checkbutton(label="Use spaces for Tab",
-                            variable=(us_var := tk.BooleanVar(value=self._use_spaces)),
-                            command=lambda: self.set_use_spaces(us_var.get()))
-        vm.add_separator()
-        vm.add_command(label="Zoom In", command=lambda: self.zoom(1))
-        vm.add_command(label="Zoom Out", command=lambda: self.zoom(-1))
-        vm.add_command(label="Reset Zoom", command=self.zoom_reset)
-        vm.add_separator()
-        font_menu = tk.Menu(vm, tearoff=0)
-        font_menu.add_command(label="Change Font Family…", command=self.open_font_picker)
-        font_menu.add_separator()
-        for name in _font_candidates():
-            font_menu.add_command(label=name, command=lambda n=name: self.set_font_family(n))
-        vm.add_cascade(label="Font", menu=font_menu)
-        menubar.add_cascade(label="View", menu=vm)
+        # ---- File ----
+        def build_file(m):
+            m.add_command(label="New", accelerator="Ctrl+T", command=self.new_tab)
+            m.add_command(label="Open…", accelerator="Ctrl+O", command=self.open_file)
+            m.add_command(label="Save", accelerator="Ctrl+S", command=self.save_file)
+            m.add_command(label="Save As…", accelerator="Ctrl+Shift+S", command=self.save_as)
+            m.add_separator()
+            m.add_command(label="Exit", accelerator="Ctrl+Q", command=self.on_close)
 
-        tm = tk.Menu(menubar, tearoff=0)
-        tm.add_command(label="New Tab", accelerator="Ctrl+T", command=self.new_tab)
-        tm.add_command(label="Close Tab", accelerator="Ctrl+W", command=self.close_tab)
-        tm.add_separator()
-        tm.add_command(label="Next Tab", accelerator="Ctrl+PgDn", command=self._next_tab)
-        tm.add_command(label="Prev Tab", accelerator="Ctrl+PgUp", command=self._prev_tab)
-        tm.add_separator()
-        for i in range(1, 10):
-            tm.add_command(label=f"Tab {i}", command=lambda n=i: self._goto_tab(n))
-        menubar.add_cascade(label="Tab", menu=tm)
+        def build_file_full(m):
+            m.add_command(label="New Tab", accelerator="Ctrl+T", command=self.new_tab)
+            m.add_command(label="New File", accelerator="Ctrl+N", command=self.new_tab)
+            m.add_command(label="Open…", accelerator="Ctrl+O", command=self.open_file)
+            m.add_command(label="Save", accelerator="Ctrl+S", command=self.save_file)
+            m.add_command(label="Save As…", accelerator="Ctrl+Shift+S", command=self.save_as)
+            m.add_command(label="Close Tab", accelerator="Ctrl+W", command=self.close_tab)
+            m.add_command(label="Close Pane", accelerator="Ctrl+Shift+W", command=self.close_pane)
+            m.add_separator()
+            self.recent_menu = tk.Menu(m, tearoff=0)
+            m.add_cascade(label="Open Recent", menu=self.recent_menu)
+            self._rebuild_recent_menu()
+            m.add_separator()
+            m.add_command(label="Revert", command=self.revert_file)
+            m.add_separator()
+            le = tk.Menu(m, tearoff=0)
+            for eol in ["LF", "CRLF", "CR"]:
+                le.add_command(label=eol, command=lambda x=eol: self.set_line_ending(x))
+            m.add_cascade(label="Line Endings", menu=le)
+            m.add_separator()
+            m.add_command(label="Exit", accelerator="Ctrl+Q", command=self.on_close)
 
-        tools = tk.Menu(menubar, tearoff=0)
-        tools.add_command(label="Plugin Manager…", command=self.open_plugin_manager)
-        tools.add_separator()
-        tools.add_command(label="Save Settings Now", command=self.save_settings)
-        tools.add_command(label="Open Config Folder", command=self._open_config_folder)
-        menubar.add_cascade(label="Tools", menu=tools)
+        # ---- Edit ----
+        def build_edit(m):
+            m.add_command(label="Undo", accelerator="Ctrl+Z",
+                          command=lambda: self.text.event_generate("<<Undo>>"))
+            m.add_command(label="Redo", accelerator="Ctrl+Y",
+                          command=lambda: self.text.event_generate("<<Redo>>"))
+            m.add_separator()
+            m.add_command(label="Cut", command=lambda: self.text.event_generate("<<Cut>>"))
+            m.add_command(label="Copy", command=lambda: self.text.event_generate("<<Copy>>"))
+            m.add_command(label="Paste", command=lambda: self.text.event_generate("<<Paste>>"))
+            m.add_command(label="Select All", accelerator="Ctrl+A", command=self.select_all)
+            m.add_separator()
+            m.add_command(label="Find & Replace…", accelerator="Ctrl+F", command=self.open_find)
+            m.add_command(label="Go to line…", accelerator="Ctrl+G", command=self.goto_line)
 
-        sm = tk.Menu(menubar, tearoff=0)
-        th = tk.Menu(sm, tearoff=0)
-        for t in THEMES.keys():
-            th.add_command(label=t, command=lambda x=t: self.set_theme(x))
-        sm.add_cascade(label="Theme", menu=th)
-        menubar.add_cascade(label="Settings", menu=sm)
+        def build_edit_full(m):
+            build_edit(m)
+            m.add_separator()
+            m.add_command(label="Duplicate Line", command=self.duplicate_line)
+            m.add_command(label="Delete Line", command=self.delete_line)
+            m.add_command(label="Toggle Comment", command=self.toggle_comment)
+            m.add_separator()
+            m.add_command(label="UPPERCASE", command=self.uppercase_sel)
+            m.add_command(label="lowercase", command=self.lowercase_sel)
+            m.add_command(label="Trim trailing whitespace", command=self.trim_ws)
+            m.add_command(label="Sort lines", command=self.sort_lines)
+            m.add_separator()
+            m.add_command(label="Tabs → Spaces", command=self.convert_tabs_to_spaces)
+            m.add_command(label="Spaces → Tabs", command=self.convert_spaces_to_tabs)
+            m.add_separator()
+            m.add_command(label="Insert Date/Time", accelerator="F5", command=self.insert_datetime)
 
-        hm = tk.Menu(menubar, tearoff=0)
-        hm.add_command(label="Keyboard Shortcuts", accelerator="F1", command=self.show_shortcuts)
-        hm.add_command(label="About", command=self.show_about)
-        menubar.add_cascade(label="Help", menu=hm)
+        # ---- View ----
+        def build_view(m):
+            self.wrap_var = tk.BooleanVar(value=bool(self.settings.get("wrap", False)))
+            m.add_checkbutton(label="Word Wrap", variable=self.wrap_var, command=self.toggle_wrap)
+            m.add_separator()
+            m.add_command(label="Zoom In", command=lambda: self.zoom(1))
+            m.add_command(label="Zoom Out", command=lambda: self.zoom(-1))
+            m.add_command(label="Reset Zoom", command=self.zoom_reset)
 
-        self.root.config(menu=menubar)
-        self._rebuild_recent_menu()
+        def build_view_full(m):
+            build_view(m)
+            m.add_separator()
+            self.ws_var = tk.BooleanVar(value=self._show_ws)
+            m.add_checkbutton(label="Show Whitespace", variable=self.ws_var, command=self.toggle_whitespace)
+            self.autopair_var = tk.BooleanVar(value=self._autopair)
+            m.add_checkbutton(label="Auto-pair brackets", variable=self.autopair_var, command=self.toggle_autopair)
+            self.ai_var = tk.BooleanVar(value=self._auto_indent)
+            m.add_checkbutton(label="Auto-indent", variable=self.ai_var, command=self.toggle_auto_indent)
+            self.bm_var = tk.BooleanVar(value=self._bracket_match)
+            m.add_checkbutton(label="Bracket matching", variable=self.bm_var, command=self.toggle_bracket_match)
+            self.eol_var = tk.BooleanVar(value=False)
+            m.add_checkbutton(label="Show EOL markers", variable=self.eol_var, command=self.toggle_eol_markers)
+            self.ruler_var = tk.BooleanVar(value=self._show_ruler)
+            m.add_checkbutton(label="Column Ruler", variable=self.ruler_var, command=self.toggle_ruler)
+            self.syntax_var = tk.BooleanVar(value=self._syntax)
+            m.add_checkbutton(label="Syntax Highlighting", variable=self.syntax_var,
+                              command=self.toggle_syntax)
+            m.add_separator()
+            m.add_command(label="Split Vertical", accelerator="Ctrl+\\", command=self.toggle_split)
+            m.add_separator()
+            tw = tk.Menu(m, tearoff=0)
+            for w in [2, 4, 8]:
+                tw.add_command(label=f"{w} spaces", command=lambda x=w: self.set_tab_width(x))
+            m.add_cascade(label="Tab width", menu=tw)
+            self.us_var = tk.BooleanVar(value=self._use_spaces)
+            m.add_checkbutton(label="Use spaces for Tab", variable=self.us_var,
+                              command=lambda: self.set_use_spaces(self.us_var.get()))
+            m.add_separator()
+            fm2 = tk.Menu(m, tearoff=0)
+            fm2.add_command(label="Change Font Family…", command=self.open_font_picker)
+            m.add_cascade(label="Font", menu=fm2)
 
-    # ==================== tab / pane management ====================
+        # ---- Tools ----
+        def build_tools(m):
+            m.add_command(label="Simple Mode Toggle", command=self.toggle_simple_mode)
+
+        def build_tools_full(m):
+            m.add_command(label="Simple Mode Toggle", command=self.toggle_simple_mode)
+            m.add_separator()
+            m.add_command(label="Plugin Manager…", command=self.open_plugin_manager)
+            m.add_command(label="Save Settings Now", command=self.save_settings)
+            m.add_command(label="Open Config Folder", command=self._open_config_folder)
+
+        # ---- Settings ----
+        def build_settings(m):
+            th = tk.Menu(m, tearoff=0)
+            for t in THEMES.keys():
+                th.add_command(label=t, command=lambda x=t: self.set_theme(x))
+            m.add_cascade(label="Theme", menu=th)
+
+        # ---- Help ----
+        def build_help(m):
+            m.add_command(label="Keyboard Shortcuts", accelerator="F1", command=self.show_shortcuts)
+            m.add_command(label="About", command=self.show_about)
+
+        if self._simple_mode:
+            add_menu("File", build_file)
+            add_menu("Edit", build_edit)
+            add_menu("View", build_view)
+            add_menu("Tools", build_tools)
+            add_menu("Help", build_help)
+        else:
+            add_menu("File", build_file_full)
+            add_menu("Edit", build_edit_full)
+            add_menu("View", build_view_full)
+            add_menu("Tab", lambda m: (
+                m.add_command(label="New Tab", accelerator="Ctrl+T", command=self.new_tab),
+                m.add_command(label="Close Tab", accelerator="Ctrl+W", command=self.close_tab),
+                m.add_separator(),
+                m.add_command(label="Next Tab", command=self._next_tab),
+                m.add_command(label="Prev Tab", command=self._prev_tab),
+            ))
+            add_menu("Tools", build_tools_full)
+            add_menu("Settings", build_settings)
+            add_menu("Help", build_help)
 
     def new_tab(self):
         tab = Tab(self.notebook, self)
@@ -888,6 +1011,9 @@ class QuillinksGUI:
         self._theme = name
         self.settings["theme"] = name
         self._apply_theme()
+        for tab in self.tabs:
+            for pane in tab.panes:
+                self._apply_syntax_to(pane)
         self.status.config(text=f" Theme: {name}")
 
     # ==================== tab/space ====================
@@ -1010,6 +1136,7 @@ class QuillinksGUI:
         pane.dirty = False
         pane.text.edit_modified(False)
         self._update_gutter_for_pane(pane)
+        self._apply_syntax_to(pane)
 
     def _open_path(self, path):
         # reuse active pane if blank
