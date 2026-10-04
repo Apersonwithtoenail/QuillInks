@@ -11,7 +11,13 @@ if "GSK_RENDERER" not in os.environ:
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Gdk, Gio, GLib, Adw  # noqa: E402
+gi.require_version("GtkSource", "5")
+from gi.repository import Gtk, Gdk, Gio, GLib, Adw, GtkSource  # noqa: E402
+
+
+# Singleton managers for language/style lookup
+_LANG_MGR = GtkSource.LanguageManager.get_default()
+_STYLE_MGR = GtkSource.StyleSchemeManager.get_default()
 
 
 # ══════════════════════════════════════════════════════════════
@@ -206,29 +212,60 @@ def apply_css(theme):
 # ══════════════════════════════════════════════════════════════
 
 class EditorTab(Gtk.Box):
+    """A single editor tab: GtkSource.View with syntax highlighting, line numbers,
+    bracket matching, auto-indent, current-line highlight — all native."""
+
     def __init__(self, path=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.path = Path(path).expanduser().resolve() if path else None
         self.dirty = False
 
+        # GtkSource.Buffer with our style scheme
+        self.buffer = GtkSource.Buffer()
+        scheme = _STYLE_MGR.get_scheme("oblivion")
+        if scheme:
+            self.buffer.set_style_scheme(scheme)
+        self.buffer.set_highlight_matching_brackets(True)
+
+        # Load file
+        if self.path and self.path.exists():
+            raw = self.path.read_text(errors="replace")
+            self.buffer.set_text(raw)
+
+        # Auto-detect language by extension
+        self._apply_language()
+
+        # GtkSource.View
+        self.view = GtkSource.View(buffer=self.buffer)
+        self.view.set_monospace(True)
+        self.view.set_wrap_mode(Gtk.WrapMode.NONE)
+        self.view.set_show_line_numbers(True)
+        self.view.set_highlight_current_line(True)
+        self.view.set_auto_indent(True)
+        self.view.set_insert_spaces_instead_of_tabs(True)
+        self.view.set_tab_width(4)
+        self.view.set_left_margin(8)
+        self.view.set_right_margin(8)
+        self.view.set_show_right_margin(True)
+        self.view.set_right_margin_position(80)
+
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_hexpand(True)
         scrolled.set_vexpand(True)
-
-        self.buffer = Gtk.TextBuffer()
-        if self.path and self.path.exists():
-            self.buffer.set_text(self.path.read_text(errors="replace"))
-
-        self.view = Gtk.TextView(buffer=self.buffer)
-        self.view.set_monospace(True)
-        self.view.set_wrap_mode(Gtk.WrapMode.NONE)
-        self.view.set_left_margin(8)
-        self.view.set_right_margin(8)
-
         scrolled.set_child(self.view)
         self.append(scrolled)
 
         self.buffer.connect("changed", self._on_changed)
+
+    def _apply_language(self):
+        if not self.path:
+            lang = _LANG_MGR.get_language("markdown")
+        else:
+            lang = _LANG_MGR.guess_language(self.path.name, None)
+            if lang is None:
+                lang = _LANG_MGR.get_language("text")
+        if lang:
+            self.buffer.set_language(lang)
 
     def _on_changed(self, _buf):
         self.dirty = True
