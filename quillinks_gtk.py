@@ -12,7 +12,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("GtkSource", "5")
-from gi.repository import Gtk, Gdk, Gio, GLib, Adw, GtkSource  # noqa: E402
+from gi.repository import Gtk, Gdk, Gio, GLib, Adw, GtkSource, Pango, PangoCairo  # noqa: E402
 
 
 # Singleton managers for language/style lookup
@@ -57,6 +57,23 @@ VINTAGE = {
 }
 
 
+HIGH_CONTRAST = {
+    "bg":           "#000000",
+    "fg":           "#ffffff",
+    "accent":       "#ffff00",
+    "accent2":      "#cccc00",
+    "toolbar_bg":   "#000000",
+    "toolbar_fg":   "#ffffff",
+    "tab_bg":       "#1a1a1a",
+    "tab_active":   "#000000",
+    "tab_fg":       "#ffff00",
+    "status_bg":    "#000000",
+    "status_fg":    "#ffffff",
+    "border":       "#ffffff",
+    "hover":        "#333333",
+}
+
+
 # ══════════════════════════════════════════════════════════════
 #  Config (ported from Tkinter version — pure Python, no UI)
 # ══════════════════════════════════════════════════════════════
@@ -83,6 +100,7 @@ _CONFIG_DIR = _config_dir()
 _SETTINGS_FILE = _CONFIG_DIR / "settings.json"
 _RECENT_FILE = _CONFIG_DIR / "recent.json"
 _SESSION_FILE = _CONFIG_DIR / "session.json"
+_HISTORY_FILE = _CONFIG_DIR / "search_history.json"
 _MAX_RECENT = 10
 
 DEFAULT_SETTINGS = {
@@ -135,6 +153,24 @@ def _load_recent():
 
 def _save_recent(paths):
     _save_json(_RECENT_FILE, paths[:_MAX_RECENT])
+
+
+def _load_history():
+    return _load_json(_HISTORY_FILE, [])[:20]
+
+
+def _save_history(items):
+    _save_json(_HISTORY_FILE, items[:20])
+
+
+def _push_history(text):
+    text = (text or "").strip()
+    if not text:
+        return
+    items = _load_history()
+    items = [x for x in items if x != text]
+    items.insert(0, text)
+    _save_history(items)
 
 
 def _push_recent(path):
@@ -506,6 +542,7 @@ class EditorTab(Gtk.Box):
         self.view.set_show_right_margin(True)
         self.view.set_right_margin_position(80)
 
+        self.view.add_css_class("ql-editor")
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_hexpand(True)
         scrolled.set_vexpand(True)
@@ -596,8 +633,16 @@ class FindBar(Gtk.Revealer):
         self.search_entry.set_placeholder_text("Find…")
         self.search_entry.set_hexpand(True)
         self.search_entry.connect("search-changed", self._on_search_changed)
-        self.search_entry.connect("activate", lambda *_: self.find_next())
+        self.search_entry.connect("activate", self._on_enter)
         outer.append(self.search_entry)
+
+        self.history_btn = Gtk.MenuButton()
+        self.history_btn.set_icon_name("document-open-recent-symbolic")
+        self.history_btn.set_tooltip_text("Recent searches")
+        self._hist_popover = None
+        self._hist_box = None
+        self._rebuild_history_menu()
+        outer.append(self.history_btn)
 
         # options
         self.case_btn = self._toggle("Aa", "Case sensitive", self._on_search_changed)
@@ -659,6 +704,51 @@ class FindBar(Gtk.Revealer):
         self.set_child(wrapper)
 
         self._replace_visible = False
+
+    def _on_enter(self, *_):
+        _push_history(self.search_entry.get_text())
+        self._rebuild_history_menu()
+        self.find_next()
+
+    def _rebuild_history_menu(self):
+        if self._hist_popover is None:
+            self._hist_popover = Gtk.Popover()
+            self._hist_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            self._hist_box.set_margin_start(4)
+            self._hist_box.set_margin_end(4)
+            self._hist_box.set_margin_top(4)
+            self._hist_box.set_margin_bottom(4)
+            self._hist_popover.set_child(self._hist_box)
+            self.history_btn.set_popover(self._hist_popover)
+
+        child = self._hist_box.get_first_child()
+        while child:
+            nxt = child.get_next_sibling()
+            self._hist_box.remove(child)
+            child = nxt
+
+        items = _load_history()
+        if not items:
+            lbl = Gtk.Label(label="No recent searches")
+            lbl.set_margin_start(8)
+            lbl.set_margin_end(8)
+            lbl.set_margin_top(6)
+            lbl.set_margin_bottom(6)
+            self._hist_box.append(lbl)
+            return
+        for item in items:
+            b = Gtk.Button(label=item)
+            b.set_has_frame(False)
+            if b.get_child():
+                b.get_child().set_xalign(0)
+            b.connect("clicked", lambda _b, t=item: self._apply_history(t))
+            self._hist_box.append(b)
+
+    def _apply_history(self, text):
+        self.search_entry.set_text(text)
+        if self._hist_popover:
+            self._hist_popover.popdown()
+        self._on_search_changed()
 
     def _toggle(self, label, tooltip, cb):
         b = Gtk.ToggleButton(label=label)
@@ -821,6 +911,11 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.settings = _load_settings()
         self._initial_paths = initial_paths or []
         self._install_shortcuts()
+        self._hc_provider = None
+        self._font_provider = None
+        if self.settings.get("theme") == "high-contrast":
+            self.toggle_high_contrast(True)
+        self._apply_font_css()
 
         # Restore geometry
         try:
@@ -850,6 +945,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Open…", self.on_open),
             ("Save", self.on_save),
             ("Save As…", self.on_save_as),
+            ("Open by Path…", self.on_open_path),
             ("-", None),
             ("Revert", self.on_revert),
             ("-", None),
@@ -895,6 +991,10 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Reset Zoom", self.zoom_reset),
             "-",
             ("Fullscreen", self.toggle_fullscreen, True, False),
+            "-",
+            ("Font…", self.on_font_picker),
+            ("High Contrast", self.toggle_high_contrast, True,
+             self.settings.get("theme", "vintage-brown") == "high-contrast"),
         ]))
         toolbar.append(self._make_menu("Help", [
             ("Keyboard Shortcuts", self.on_help),
@@ -1039,6 +1139,14 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         tab.view.set_auto_indent(bool(s.get("auto_indent", True)))
         tab.view.set_editable(not s.get("read_only", False))
         self._apply_whitespace(tab.view)
+        fam = s.get("font_family") or "Monospace"
+        fd = Pango.FontDescription()
+        fd.set_family(fam)
+        fd.set_size(int(s.get("font_size", 13)) * Pango.SCALE)
+        try:
+            tab.view.override_font(fd)
+        except Exception:
+            pass
 
     # ---------- View toggles ----------
 
@@ -1097,13 +1205,18 @@ class QuillinksWindow(Gtk.ApplicationWindow):
     # ---------- Zoom ----------
 
     def _apply_font_css(self):
-        # Font size lives on the textview via a class
-        provider = Gtk.CssProvider()
+        # Direct override — CSS classes don't cascade into GtkSource.View
+        # inner text node reliably on older GTK4 builds.
+        family = self.settings.get("font_family") or "Monospace"
         size = getattr(self, "_font_size", 13)
-        provider.load_from_string(f"textview {{ font-size: {size}px; }}")
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(), provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+        fd = Pango.FontDescription()
+        fd.set_family(family)
+        fd.set_size(int(size) * Pango.SCALE)
+        for t in getattr(self, "tabs", []) or []:
+            try:
+                t.view.override_font(fd)
+            except Exception:
+                pass
 
     def zoom_in(self, *_):
         self._font_size = min(28, getattr(self, "_font_size", 13) + 1)
@@ -1147,6 +1260,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("<Control>t", self.on_new),
             ("<Control>o", self.on_open),
             ("<Control>s", self.on_save),
+            ("<Control><Shift>o", self.on_open_path),
             ("<Control><Shift>s", self.on_save_as),
             ("<Control>q", self.on_quit),
             ("<Control>z", lambda: self._do("undo")),
@@ -1417,6 +1531,206 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         d = Adw.MessageDialog(transient_for=self, heading="Keyboard Shortcuts", body=text)
         d.add_response("ok", "Close")
         d.present()
+
+    def on_font_picker(self, *_):
+        # Lightweight popover: searchable list of families, no preview pane.
+        # The GTK4 FontDialog re-renders a live preview on every keystroke
+        # and crawls on the P6200 with software rendering.
+        win = Gtk.Window()
+        win.set_transient_for(self)
+        win.set_modal(True)
+        win.set_title("Choose Font")
+        win.set_default_size(300, 420)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_start(8); box.set_margin_end(8)
+        box.set_margin_top(8); box.set_margin_bottom(8)
+        box.set_size_request(260, 340)
+
+        entry = Gtk.SearchEntry()
+        entry.set_placeholder_text("Filter fonts…")
+        box.append(entry)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        listbox = Gtk.ListBox()
+        listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        scrolled.set_child(listbox)
+        box.append(scrolled)
+
+        # Enumerate families once — cheap, no rendering
+        try:
+            fm = PangoCairo.FontMap.get_default()
+            all_fams = sorted({f.get_name() for f in fm.list_families()},
+                              key=lambda x: x.lower())
+        except Exception:
+            all_fams = ["Monospace", "Sans", "Serif"]
+
+        current = self.settings.get("font_family") or "Monospace"
+
+        def _populate(filter_text=""):
+            child = listbox.get_first_child()
+            while child:
+                nxt = child.get_next_sibling()
+                listbox.remove(child)
+                child = nxt
+            ft = filter_text.strip().lower()
+            for fam in all_fams:
+                if ft and ft not in fam.lower():
+                    continue
+                row = Gtk.ListBoxRow()
+                lbl = Gtk.Label(label=fam)
+                lbl.set_xalign(0)
+                lbl.set_margin_start(6); lbl.set_margin_end(6)
+                lbl.set_margin_top(4); lbl.set_margin_bottom(4)
+                # Apply the font to its own label so the user sees a mini-preview
+                try:
+                    fd = Pango.FontDescription()
+                    fd.set_family(fam)
+                    fd.set_size(11 * Pango.SCALE)
+                    lbl.override_font(fd)
+                except Exception:
+                    pass
+                row.set_child(lbl)
+                row._family = fam
+                if fam == current:
+                    listbox.select_row(row)
+                listbox.append(row)
+
+        def _on_row(_lb, row):
+            if row is None:
+                return
+            fam = getattr(row, "_family", None)
+            if not fam:
+                return
+            self.settings["font_family"] = fam
+            self._apply_font_css()
+            win.close()
+
+        listbox.connect("row-activated", _on_row)
+        entry.connect("search-changed", lambda e: _populate(e.get_text()))
+
+        _populate("")
+
+        win.set_child(box)
+        win.present()
+        entry.grab_focus()
+
+    def toggle_high_contrast(self, on):
+        self.settings["theme"] = "high-contrast" if on else "vintage-brown"
+        display = Gdk.Display.get_default()
+        if getattr(self, "_hc_provider", None) is not None:
+            try:
+                Gtk.StyleContext.remove_provider_for_display(
+                    display, self._hc_provider)
+            except Exception:
+                pass
+            self._hc_provider = None
+        if on:
+            prov = Gtk.CssProvider()
+            prov.load_from_string(css(HIGH_CONTRAST))
+            Gtk.StyleContext.add_provider_for_display(
+                display, prov,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 5)
+            self._hc_provider = prov
+
+    def on_open_path(self, *_):
+        win = Gtk.Window()
+        win.set_transient_for(self)
+        win.set_modal(True)
+        win.set_title("Open by path")
+        win.set_default_size(520, -1)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.set_margin_start(12); box.set_margin_end(12)
+        box.set_margin_top(12); box.set_margin_bottom(12)
+
+        entry = Gtk.Entry()
+        entry.set_placeholder_text("Path… (Tab to complete, Enter to open)")
+        entry.set_hexpand(True)
+        box.append(entry)
+
+        status = Gtk.Label(label="")
+        status.set_halign(Gtk.Align.START)
+        box.append(status)
+
+        def _complete():
+            txt = entry.get_text().strip()
+            if not txt:
+                return
+            try:
+                p = Path(txt).expanduser()
+            except Exception:
+                return
+            # If path is a dir, list it; else complete the basename
+            if p.is_dir():
+                try:
+                    kids = sorted(p.iterdir(), key=lambda x: x.name.lower())
+                except Exception:
+                    kids = []
+                if kids:
+                    entry.set_text(str(kids[0]))
+                    entry.set_position(-1)
+                    status.set_text(f"{len(kids)} entries")
+                return
+            parent = p.parent if str(p.parent) else Path(".")
+            prefix = p.name
+            try:
+                cands = sorted(
+                    (x for x in parent.iterdir() if x.name.startswith(prefix)),
+                    key=lambda x: x.name.lower())
+            except Exception:
+                cands = []
+            if not cands:
+                status.set_text("no match")
+                return
+            entry.set_text(str(cands[0]))
+            entry.set_position(-1)
+            status.set_text(f"{len(cands)} match{'es' if len(cands) != 1 else ''}")
+
+        def _commit():
+            txt = entry.get_text().strip()
+            if not txt:
+                return
+            p = Path(txt).expanduser()
+            if not p.exists() or p.is_dir():
+                status.set_text("not a file")
+                return
+            self._add_tab(str(p))
+            _push_recent(str(p))
+            win.close()
+
+        key_ctrl = Gtk.EventControllerKey()
+        def _on_key(_c, keyval, _kc, state):
+            name = Gdk.keyval_name(keyval)
+            if name == "Tab":
+                _complete()
+                return True
+            if name in ("Return", "KP_Enter"):
+                _commit()
+                return True
+            if name == "Escape":
+                win.close()
+                return True
+            return False
+        key_ctrl.connect("key-pressed", _on_key)
+        entry.add_controller(key_ctrl)
+
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_row.set_halign(Gtk.Align.END)
+        cancel = Gtk.Button(label="Cancel")
+        cancel.connect("clicked", lambda *_: win.close())
+        ok = Gtk.Button(label="Open")
+        ok.add_css_class("suggested-action")
+        ok.connect("clicked", lambda *_: _commit())
+        btn_row.append(cancel)
+        btn_row.append(ok)
+        box.append(btn_row)
+
+        win.set_child(box)
+        win.present()
+        entry.grab_focus()
 
     def _active_tab(self):
         idx = self.notebook.get_current_page()
