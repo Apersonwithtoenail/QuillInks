@@ -985,6 +985,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Open Recent…", self.on_recent),
             ("-", None),
             ("Revert", self.on_revert),
+            ("Print…", self.on_print),
             ("-", None),
             ("Line Endings: LF",   lambda *_: self.set_line_ending("LF")),
             ("Line Endings: CRLF", lambda *_: self.set_line_ending("CRLF")),
