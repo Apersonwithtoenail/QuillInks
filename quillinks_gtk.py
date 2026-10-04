@@ -40,20 +40,25 @@ DARK = {
     "hover":        "#3d3d3d",
 }
 
+# 4 colours only:
+#   bg      = #1a1614  (editor + toolbar + active tab)
+#   tab_bg  = #0e0c0b  (tab strip + status bar — the darker chrome)
+#   fg      = #e8dcc8  (text)
+#   accent  = #d4a373  (the one accent — button + hover)
 VINTAGE = {
-    "bg":           "#1a1614",   # very dark warm charcoal
-    "fg":           "#e8dcc8",   # warm cream
-    "accent":       "#d4a373",   # amber
-    "accent2":      "#a57548",   # muted amber
-    "toolbar_bg":   "#1a1614",   # same as bg — flat chrome
+    "bg":           "#1a1614",
+    "fg":           "#e8dcc8",
+    "accent":       "#d4a373",
+    "accent2":      "#d4a373",   # same as accent — no second amber
+    "toolbar_bg":   "#1a1614",
     "toolbar_fg":   "#e8dcc8",
-    "tab_bg":       "#121010",   # slightly darker than bg
+    "tab_bg":       "#0e0c0b",
     "tab_active":   "#1a1614",
-    "tab_fg":       "#7a6f5e",   # muted
-    "status_bg":    "#121010",
+    "tab_fg":       "#7a6f5e",
+    "status_bg":    "#0e0c0b",
     "status_fg":    "#7a6f5e",
-    "border":       "#2a2420",   # subtle
-    "hover":        "#25211e",
+    "border":       "#0e0c0b",
+    "hover":        "#1a1614",
 }
 
 
@@ -331,22 +336,39 @@ def css(t):
         box-shadow: none;
     }}
 
+    /* ---- window chrome (kills GNOME's grey bleed) ---- */
+    window, window.background, .background,
+    headerbar, .titlebar,
+    window > .background {{
+        background: {t['bg']};
+        color: {t['fg']};
+        box-shadow: none;
+        border: none;
+    }}
+
     /* ---- menu buttons in toolbar ---- */
-    menubutton > button {{
+    menubutton > button,
+    menubutton > button:focus,
+    menubutton > button:focus-visible,
+    menubutton > button:focus-within {{
         background: transparent;
         color: {t['toolbar_fg']};
         border: none;
-        border-radius: 8px;
+        outline: none;
+        box-shadow: none;
+        border-radius: 6px;
         padding: 6px 12px;
         font-weight: 500;
         transition: background 140ms ease-out, color 140ms ease-out;
     }}
     menubutton > button:hover {{
-        background: {t['hover']};
+        background: {t['tab_bg']};
         color: {t['accent']};
     }}
-    menubutton > button:active {{
-        background: {t['border']};
+    menubutton > button:active,
+    menubutton > button:checked {{
+        background: {t['tab_bg']};
+        color: {t['accent']};
     }}
 
     /* ---- Simple Mode toggle (circular) ---- */
@@ -677,7 +699,7 @@ class EditorTab(Gtk.Box):
         self.view.set_tab_width(4)
         self.view.set_left_margin(8)
         self.view.set_right_margin(8)
-        self.view.set_show_right_margin(True)
+        self.view.set_show_right_margin(False)
         self.view.set_right_margin_position(80)
 
         self.view.add_css_class("ql-editor")
@@ -1091,6 +1113,9 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             self.toggle_high_contrast(True)
         self._apply_font_css()
         GLib.timeout_add_seconds(30, self._autosave_tick)
+        # re-apply theme after window realizes — GNOME paints outer chrome
+        # before our CSS lands, leaving grey bleed on the first frame
+        GLib.idle_add(lambda: (swap_theme(self.settings.get("theme", "vintage-brown")), False)[1])
         self._apply_simple_mode()
 
         # Restore geometry
