@@ -1045,10 +1045,15 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Font…", self.on_font_picker),
             ("High Contrast", self.toggle_high_contrast, True,
              self.settings.get("theme", "vintage-brown") == "high-contrast"),
+            "-",
+            ("File Tree", self.toggle_file_tree, True, False),
+            ("Quick Open…", self.on_quick_open),
+            ("Spell Check", self.toggle_spell_check, True, False),
         ]))
         toolbar.append(self._make_menu("Help", [
             ("Command Palette", self.on_palette),
             ("Keyboard Shortcuts", self.on_help),
+            ("Install File Association…", self.install_file_association),
             "-",
             ("About", self.on_about),
         ]))
@@ -1333,6 +1338,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("<Control>s", self.on_save),
             ("<Control><Shift>o", self.on_open_path),
             ("<Control><Shift>p", self.on_palette),
+            ("<Control>p", self.on_quick_open),
             ("<Control><Shift>s", self.on_save_as),
             ("<Control>q", self.on_quit),
             ("<Control>z", lambda: self._do("undo")),
@@ -2195,6 +2201,244 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         except Exception:
             pass
         return False
+
+    # ---------- File tree ----------
+
+    def toggle_file_tree(self, on):
+        self.settings["show_file_tree"] = bool(on)
+        if not on:
+            if getattr(self, "_tree_paned", None) is not None:
+                self._unsplit_tree()
+            return
+        if getattr(self, "_tree_paned", None) is not None:
+            return
+        try:
+            self._build_tree()
+        except Exception:
+            pass
+
+    def _build_tree(self):
+        root = Path.cwd()
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.set_size_request(220, -1)
+        tree = Gtk.TreeStore(str)
+        it = tree.append(None, [str(root)])
+        for child in sorted(root.iterdir()):
+            name = child.name
+            if name.startswith("."):
+                continue
+            tree.append(it, [name])
+        tv = Gtk.TreeView(model=tree)
+        col = Gtk.TreeViewColumn("Files")
+        cell = Gtk.CellRendererText()
+        col.pack_start(cell, True)
+        col.add_attribute(cell, "text", 0)
+        tv.append_column(col)
+
+        def _row_activated(_tv, path, _col):
+            it = tree.get_iter(path)
+            name = tree.get_value(it, 0)
+            parent = tree.iter_parent(it)
+            base = root if parent is None else root / tree.get_value(parent, 0)
+            full = base / name if parent is not None else Path(name)
+            if full.is_file():
+                self._add_tab(str(full))
+                _push_recent(str(full))
+
+        tv.connect("row-activated", _row_activated)
+        sw.set_child(tv)
+
+        parent = self.notebook.get_parent()
+        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        paned.set_wide_handle(True)
+        if isinstance(parent, Gtk.Box):
+            parent.remove(self.notebook)
+            paned.set_start_child(sw)
+            paned.set_end_child(self.notebook)
+            parent.append(paned)
+        else:
+            return
+        self._tree_paned = paned
+        self._tree_root = root
+        self._tree_parent = parent
+        try:
+            GLib.timeout_add(80, lambda: (paned.set_position(220), False)[1])
+        except Exception:
+            pass
+
+    def _unsplit_tree(self):
+        paned = getattr(self, "_tree_paned", None)
+        parent = getattr(self, "_tree_parent", None)
+        if paned is None or parent is None:
+            return
+        paned.set_start_child(None)
+        paned.set_end_child(None)
+        if isinstance(parent, Gtk.Box):
+            parent.remove(paned)
+            parent.append(self.notebook)
+        self._tree_paned = None
+        self._tree_parent = None
+
+    # ---------- Quick open ----------
+
+    def on_quick_open(self, *_):
+        root = getattr(self, "_tree_root", Path.cwd())
+        files = []
+        try:
+            for fp in root.rglob("*"):
+                if fp.is_file() and not any(part.startswith(".")
+                                             for part in fp.parts):
+                    files.append(fp)
+                if len(files) > 5000:
+                    break
+        except Exception:
+            pass
+
+        win = Gtk.Window()
+        win.set_transient_for(self)
+        win.set_modal(True)
+        win.set_title("Quick Open")
+        win.set_default_size(520, 420)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_start(8); box.set_margin_end(8)
+        box.set_margin_top(8); box.set_margin_bottom(8)
+        entry = Gtk.SearchEntry()
+        entry.set_placeholder_text("Type a file name…")
+        box.append(entry)
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        lb = Gtk.ListBox()
+        lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        scrolled.set_child(lb)
+        box.append(scrolled)
+
+        def _populate(flt=""):
+            child = lb.get_first_child()
+            while child:
+                nxt = child.get_next_sibling()
+                lb.remove(child)
+                child = nxt
+            fl = flt.strip().lower()
+            for fp in files:
+                name = fp.name.lower()
+                if fl and fl not in name and fl not in str(fp).lower():
+                    continue
+                row = Gtk.ListBoxRow()
+                lbl = Gtk.Label(label=str(fp.relative_to(root)))
+                lbl.set_xalign(0)
+                lbl.set_margin_start(6); lbl.set_margin_end(6)
+                lbl.set_margin_top(3); lbl.set_margin_bottom(3)
+                row.set_child(lbl)
+                row._path = str(fp)
+                lb.append(row)
+                if lb.get_row_at_index(400) is not None:
+                    break
+
+        def _open(_lb, row):
+            path = getattr(row, "_path", None)
+            win.close()
+            if path:
+                self._add_tab(path)
+                _push_recent(path)
+
+        lb.connect("row-activated", _open)
+        entry.connect("search-changed", lambda e: _populate(e.get_text()))
+        entry.connect("activate", lambda *_: (
+            _open(lb, lb.get_selected_row() or lb.get_row_at_index(0))))
+        _populate("")
+        win.set_child(box)
+        win.present()
+        entry.grab_focus()
+
+    # ---------- Spell check ----------
+
+    def toggle_spell_check(self, on):
+        self.settings["spell_check"] = bool(on)
+        tab = self._active_tab()
+        if not tab:
+            return
+        try:
+            import gi as _gi
+            _gi.require_version("Gspell", "1")
+            from gi.repository import Gspell as _GS
+        except Exception:
+            self._show_error("Spell check unavailable",
+                             "gspell not installed.\n\nsudo apt install gir1.2-gspell-1")
+            return
+        try:
+            if on:
+                if getattr(tab, "_spell", None) is None:
+                    tab._spell = _GS.TextView.get_from_gtk_text_view(tab.view)
+                    if tab._spell is None:
+                        tab._spell = _GS.TextView.new(tab.view)
+                    tab._spell.set_inline_spell_checking(True)
+                    tab._spell.set_enable_language_autodetect(True)
+            else:
+                if getattr(tab, "_spell", None) is not None:
+                    tab._spell.set_inline_spell_checking(False)
+        except Exception as e:
+            self._show_error("Spell check error", str(e))
+
+    # ---------- Print ----------
+
+    def on_print(self, *_):
+        tab = self._active_tab()
+        if not tab:
+            return
+        op = Gtk.PrintOperation()
+        op.set_job_name(tab.title())
+        txt = tab.buffer.get_text(tab.buffer.get_start_iter(),
+                                  tab.buffer.get_end_iter(), False)
+        # Render to a simple text layout via Cairo
+        def _draw(op_, ctx_, _pctx):
+            layout = ctx_.create_pango_layout(txt)
+            layout.set_width(int(ctx_.get_width() * 96))
+            layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+            ctx_.move_to(30, 30)
+            PangoCairo.show_layout(ctx_, layout)
+        op.connect("draw-page", lambda o, c, _p, _n: _draw(o, c, None))
+        try:
+            op.run(Gtk.PrintOperationAction.SHOW_DIALOG, self)
+        except Exception as e:
+            self._show_error("Print failed", str(e))
+
+    # ---------- File association ----------
+
+    def install_file_association(self):
+        apps_dir = Path.home() / ".local" / "share" / "applications"
+        apps_dir.mkdir(parents=True, exist_ok=True)
+        here = Path(__file__).resolve()
+        py = sys.executable
+        icon = "accessories-text-editor"
+        desktop = apps_dir / "quillinks.desktop"
+        content = (
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Quillinks\n"
+            "Comment=Modern GTK4 text editor\n"
+            f"Exec={py} {here} %F\n"
+            f"Icon={icon}\n"
+            "Terminal=false\n"
+            "Categories=Utility;TextEditor;\n"
+            "MimeType=text/plain;text/x-python;text/markdown;\n"
+            "StartupNotify=true\n"
+        )
+        try:
+            desktop.write_text(content)
+        except Exception as e:
+            self._show_error("Install failed", str(e))
+            return
+        # Try to update the mime database (may not be installed)
+        import subprocess as _sp
+        try:
+            _sp.Popen(["update-desktop-database", str(apps_dir)],
+                      stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+        except Exception:
+            pass
+        self._show_error("File association installed",
+                         f"Created {desktop}\n\n"
+                         "Right-click a text file → Open With → Quillinks")
 
     def _active_tab(self):
         idx = self.notebook.get_current_page()
