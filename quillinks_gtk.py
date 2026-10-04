@@ -523,16 +523,19 @@ class EditorTab(Gtk.Box):
             self.has_bom = True
             raw = raw[3:]
         text = raw.decode("utf-8", errors="replace")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
         self.buffer.set_text(text)
         self.dirty = False
 
     def save_to_disk(self):
         if not self.path:
-            return False
+            return False, "No path"
         text = self.buffer.get_text(
             self.buffer.get_start_iter(),
             self.buffer.get_end_iter(),
             False)
+        if text and not text.endswith("\n"):
+            text += "\n"
         if self.line_ending == "CRLF":
             text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
         elif self.line_ending == "CR":
@@ -1003,7 +1006,12 @@ class QuillinksWindow(Gtk.ApplicationWindow):
                 else:
                     b.set_sensitive(False)
                 vbox.append(b)
-        popover.set_child(vbox)
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        sw.set_propagate_natural_height(True)
+        sw.set_max_content_height(460)
+        sw.set_child(vbox)
+        popover.set_child(sw)
         btn.set_popover(popover)
         return btn
 
@@ -1411,6 +1419,37 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         return tab
 
     def _close_tab(self, tab):
+        if tab is None or tab not in self.tabs:
+            return
+        if not tab.dirty:
+            return self._remove_tab(tab)
+        d = Adw.MessageDialog(
+            transient_for=self,
+            heading="Save changes?",
+            body=f"{tab.title()} has unsaved changes.")
+        d.add_response("cancel", "Cancel")
+        d.add_response("discard", "Discard")
+        d.add_response("save", "Save")
+        d.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
+        d.set_default_response("save")
+        d.set_close_response("cancel")
+
+        def _resp(_d, r):
+            if r == "discard":
+                self._remove_tab(tab)
+            elif r == "save":
+                if not tab.path:
+                    self.notebook.set_current_page(self.tabs.index(tab))
+                    return self.on_save_as()
+                ok, err = tab.save_to_disk()
+                if ok:
+                    self._remove_tab(tab)
+                else:
+                    self._show_error("Save failed", err)
+        d.connect("response", _resp)
+        d.present()
+
+    def _remove_tab(self, tab):
         if tab not in self.tabs:
             return
         idx = self.tabs.index(tab)
@@ -1525,8 +1564,10 @@ class QuillinksWindow(Gtk.ApplicationWindow):
                 if f:
                     tab.path = Path(f.get_path())
                     self.on_save()
-            except Exception:
+            except GLib.Error:
                 pass
+            except Exception as e:
+                self._show_error("Save As failed", str(e))
         dialog.save(self, None, _done)
 
     def on_quit(self, *_):
