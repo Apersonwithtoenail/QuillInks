@@ -171,6 +171,42 @@ PAPER_LIGHT = {
     "border": "#c9bda0", "hover": "#dcd2b8",
 }
 
+GITHUB_DARK = {
+    "bg": "#0d1117", "fg": "#c9d1d9", "accent": "#58a6ff", "accent2": "#1f6feb",
+    "toolbar_bg": "#0d1117", "toolbar_fg": "#c9d1d9",
+    "tab_bg": "#010409", "tab_active": "#0d1117", "tab_fg": "#6e7681",
+    "status_bg": "#010409", "status_fg": "#8b949e",
+    "border": "#21262d", "hover": "#161b22",
+}
+GITHUB_LIGHT = {
+    "bg": "#ffffff", "fg": "#24292f", "accent": "#0969da", "accent2": "#0550ae",
+    "toolbar_bg": "#ffffff", "toolbar_fg": "#24292f",
+    "tab_bg": "#f6f8fa", "tab_active": "#ffffff", "tab_fg": "#57606a",
+    "status_bg": "#f6f8fa", "status_fg": "#57606a",
+    "border": "#d0d7de", "hover": "#eaeef2",
+}
+AYU_MIRAGE = {
+    "bg": "#1f2430", "fg": "#cbccc6", "accent": "#ffcc66", "accent2": "#ffa759",
+    "toolbar_bg": "#1f2430", "toolbar_fg": "#cbccc6",
+    "tab_bg": "#171b24", "tab_active": "#1f2430", "tab_fg": "#707a8c",
+    "status_bg": "#171b24", "status_fg": "#707a8c",
+    "border": "#2d3441", "hover": "#242936",
+}
+EVERFOREST = {
+    "bg": "#2d353b", "fg": "#d3c6aa", "accent": "#a7c080", "accent2": "#83c092",
+    "toolbar_bg": "#2d353b", "toolbar_fg": "#d3c6aa",
+    "tab_bg": "#232a2e", "tab_active": "#2d353b", "tab_fg": "#859289",
+    "status_bg": "#232a2e", "status_fg": "#859289",
+    "border": "#3d484d", "hover": "#343f44",
+}
+CYBERPUNK = {
+    "bg": "#0d0221", "fg": "#f8f8f2", "accent": "#ff2a6d", "accent2": "#05d9e8",
+    "toolbar_bg": "#0d0221", "toolbar_fg": "#f8f8f2",
+    "tab_bg": "#05010d", "tab_active": "#0d0221", "tab_fg": "#7b6b8c",
+    "status_bg": "#05010d", "status_fg": "#05d9e8",
+    "border": "#1c0a2e", "hover": "#1a0733",
+}
+
 THEMES = {
     "vintage-brown":    VINTAGE,
     "dark":             DARK,
@@ -188,6 +224,11 @@ THEMES = {
     "kanagawa":         KANAGAWA,
     "night-owl":        NIGHT_OWL,
     "paper-light":      PAPER_LIGHT,
+    "github-dark":      GITHUB_DARK,
+    "github-light":     GITHUB_LIGHT,
+    "ayu-mirage":       AYU_MIRAGE,
+    "everforest":       EVERFOREST,
+    "cyberpunk":        CYBERPUNK,
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -631,56 +672,58 @@ def apply_css(theme):
 SCHEME_ID = "quillinks-vintage"
 
 
-def _install_source_scheme():
-    """Write a matching GtkSource XML style scheme to disk so syntax colors
-    follow our VINTAGE theme. Then register its search path."""
+def _scheme_id_for(theme_name):
+    return f"quillinks-{theme_name}"
+
+
+def _install_source_scheme(theme_name="vintage-brown"):
+    """Write a GtkSource XML style scheme derived from the current theme.
+    Regenerates on every call so theme changes propagate."""
+    palette = THEMES.get(theme_name) or VINTAGE
     styles_dir = Path.home() / ".local" / "share" / "gtksourceview-5" / "styles"
     styles_dir.mkdir(parents=True, exist_ok=True)
-    xml_path = styles_dir / f"{SCHEME_ID}.xml"
+    sid = _scheme_id_for(theme_name)
+    xml_path = styles_dir / f"{sid}.xml"
 
-    xml = """<?xml version="1.0" encoding="UTF-8"?>
-<style-scheme id="quillinks-vintage" name="Quillinks Vintage" version="1.0">
+    bg = palette["bg"]
+    tab_bg = palette["tab_bg"]
+    fg = palette["fg"]
+    fg_dim = palette["tab_fg"]
+    accent = palette["accent"]
+    accent2 = palette.get("accent2", accent)
+
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<style-scheme id="{sid}" name="Quillinks {theme_name}" version="1.0">
   <author>Apersonwithtoenail</author>
-  <description>4-colour vintage palette</description>
-
-  <!-- 4-colour palette:
-       bg = #1a1614
-       tab_bg = #0e0c0b
-       fg = #e8dcc8
-       accent = #d4a373 -->
-  <color name="bg"       value="#1a1614"/>
-  <color name="tab_bg"   value="#0e0c0b"/>
-  <color name="fg"       value="#e8dcc8"/>
-  <color name="fg_dim"   value="#7a6f5e"/>
-  <color name="accent"   value="#d4a373"/>
-  <color name="keyword"  value="#d4a373"/>
-  <color name="string"   value="#b0895c"/>
-  <color name="comment"  value="#7a6f5e"/>
-  <color name="number"   value="#c9a961"/>
-  <color name="function" value="#e0b47f"/>
-  <color name="type"     value="#d4a373"/>
+  <description>Auto-generated from theme {theme_name}</description>
+  <color name="bg" value="{bg}"/>
+  <color name="tab_bg" value="{tab_bg}"/>
+  <color name="fg" value="{fg}"/>
+  <color name="fg_dim" value="{fg_dim}"/>
+  <color name="accent" value="{accent}"/>
+  <color name="accent2" value="{accent2}"/>
 
   <style name="text"              foreground="fg"     background="bg"/>
-  <style name="def:keyword"       foreground="keyword"  bold="true"/>
-  <style name="def:statement"     foreground="keyword"/>
-  <style name="def:type"          foreground="type"/>
+  <style name="def:keyword"       foreground="accent"  bold="true"/>
+  <style name="def:statement"     foreground="accent"/>
+  <style name="def:type"          foreground="accent"/>
   <style name="def:constant"      foreground="accent"   bold="true"/>
-  <style name="def:number"        foreground="number"/>
-  <style name="def:function"      foreground="function"/>
+  <style name="def:number"        foreground="accent2"/>
+  <style name="def:function"      foreground="accent"/>
   <style name="def:identifier"    foreground="fg"/>
-  <style name="def:string"        foreground="string"/>
-  <style name="def:comment"       foreground="comment"  italic="true"/>
+  <style name="def:string"        foreground="accent2"/>
+  <style name="def:comment"       foreground="fg_dim"  italic="true"/>
   <style name="def:operator"      foreground="fg_dim"/>
-  <style name="def:special-char"  foreground="keyword"/>
-  <style name="def:preprocessor"  foreground="keyword"  bold="true"/>
-  <style name="def:builtin"       foreground="type"/>
+  <style name="def:special-char"  foreground="accent"/>
+  <style name="def:preprocessor"  foreground="accent"  bold="true"/>
+  <style name="def:builtin"       foreground="accent"/>
 
-  <style name="def:bracket-match"       foreground="fg" background="#3a2e24" bold="true"/>
-  <style name="def:selection"           background="#3a2e24"/>
-  <style name="def:right-margin"        foreground="tab_bg"/>
-  <style name="line-numbers"            foreground="fg_dim" background="tab_bg"/>
-  <style name="current-line-number"     foreground="accent" background="tab_bg" bold="true"/>
-  <style name="def:current-line"        background="bg"/>
+  <style name="def:bracket-match"       foreground="fg" background="{tab_bg}" bold="true"/>
+  <style name="def:selection"           background="{tab_bg}"/>
+  <style name="def:right-margin"        foreground="{tab_bg}"/>
+  <style name="line-numbers"            foreground="fg_dim" background="{tab_bg}"/>
+  <style name="current-line-number"     foreground="accent" background="{tab_bg}" bold="true"/>
+  <style name="def:current-line"        background="{bg}"/>
   <style name="def:cursor"              foreground="accent"/>
 </style-scheme>
 """
@@ -688,7 +731,11 @@ def _install_source_scheme():
 
     mgr = GtkSource.StyleSchemeManager.get_default()
     mgr.append_search_path(str(styles_dir))
-    return mgr.get_scheme(SCHEME_ID)
+    try:
+        mgr.force_rescan()
+    except Exception:
+        pass
+    return mgr.get_scheme(sid)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -704,9 +751,10 @@ class EditorTab(Gtk.Box):
         self.path = Path(path).expanduser().resolve() if path else None
         self.dirty = False
 
-        # GtkSource.Buffer with our custom vintage scheme
+        # GtkSource.Buffer — scheme follows the active theme
         self.buffer = GtkSource.Buffer()
-        scheme = _install_source_scheme() or _STYLE_MGR.get_scheme("oblivion")
+        _active_theme = _load_settings().get("theme", "vintage-brown")
+        scheme = _install_source_scheme(_active_theme) or _STYLE_MGR.get_scheme("oblivion")
         if scheme:
             self.buffer.set_style_scheme(scheme)
         self.buffer.set_highlight_matching_brackets(True)
@@ -1267,6 +1315,12 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Theme: Kanagawa",        lambda *_: self.set_theme("kanagawa")),
             ("Theme: Night Owl",       lambda *_: self.set_theme("night-owl")),
             ("Theme: Paper Light",     lambda *_: self.set_theme("paper-light")),
+            "-",
+            ("Theme: GitHub Dark",     lambda *_: self.set_theme("github-dark")),
+            ("Theme: GitHub Light",    lambda *_: self.set_theme("github-light")),
+            ("Theme: Ayu Mirage",      lambda *_: self.set_theme("ayu-mirage")),
+            ("Theme: Everforest",      lambda *_: self.set_theme("everforest")),
+            ("Theme: Cyberpunk",       lambda *_: self.set_theme("cyberpunk")),
             "-",
             ("File Tree", self.toggle_file_tree, True, False),
             ("Quick Open…", self.on_quick_open),
@@ -2707,6 +2761,13 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.settings["theme"] = name
         try:
             swap_theme(name)
+        except Exception:
+            pass
+        try:
+            scheme = _install_source_scheme(name)
+            if scheme:
+                for t in getattr(self, "tabs", []) or []:
+                    t.buffer.set_style_scheme(scheme)
         except Exception:
             pass
 
