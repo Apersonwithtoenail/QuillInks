@@ -992,6 +992,8 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             "-",
             ("Fullscreen", self.toggle_fullscreen, True, False),
             "-",
+            ("Split View", self.toggle_split, True, False),
+            "-",
             ("Font…", self.on_font_picker),
             ("High Contrast", self.toggle_high_contrast, True,
              self.settings.get("theme", "vintage-brown") == "high-contrast"),
@@ -1268,6 +1270,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("<Control><Shift>z", lambda: self._do("redo")),
             ("<Control><Shift>d", self.duplicate_line),
             ("<Control>g", self.on_goto_line),
+            ("<Control>backslash", lambda: self.toggle_split(not bool(getattr(self, "_split_paned", None)))),
             ("<Control>w", lambda: self._close_tab(self._active_tab())),
             ("<Control>Tab", lambda: self.notebook.next_page()),
             ("<Control>Page_Down", lambda: self.notebook.next_page()),
@@ -1731,6 +1734,105 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         win.set_child(box)
         win.present()
         entry.grab_focus()
+
+    def toggle_split(self, on=None):
+        # currently split -> unsplit
+        if getattr(self, "_split_paned", None) is not None:
+            self._unsplit()
+            return
+        tab = self._active_tab()
+        if not tab:
+            return
+        parent = self.notebook.get_parent()
+        if parent is None:
+            return
+
+        second = GtkSource.View()
+        second.set_buffer(tab.buffer)
+        second.set_show_line_numbers(tab.view.get_show_line_numbers())
+        second.set_highlight_current_line(tab.view.get_highlight_current_line())
+        second.set_auto_indent(True)
+        second.set_monospace(True)
+        second.add_css_class("ql-editor")
+        try:
+            fam = self.settings.get("font_family") or "Monospace"
+            fd = Pango.FontDescription()
+            fd.set_family(fam)
+            fd.set_size(int(self.settings.get("font_size", 13)) * Pango.SCALE)
+            second.override_font(fd)
+        except Exception:
+            pass
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_hexpand(True)
+        scrolled.set_vexpand(True)
+        scrolled.set_child(second)
+
+        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        paned.set_wide_handle(True)
+        paned.set_resize_start_child(True)
+        paned.set_resize_end_child(True)
+        paned.set_shrink_start_child(False)
+        paned.set_shrink_end_child(False)
+
+        # detach notebook from its current parent, then reattach inside the paned
+        if isinstance(parent, Gtk.Box):
+            parent.remove(self.notebook)
+            paned.set_start_child(self.notebook)
+            paned.set_end_child(scrolled)
+            parent.append(paned)
+        elif isinstance(parent, Gtk.Paned):
+            return
+        elif hasattr(parent, "set_child"):
+            parent.set_child(paned)
+            paned.set_start_child(self.notebook)
+            paned.set_end_child(scrolled)
+        else:
+            return
+
+        self._split_paned = paned
+        self._split_scrolled = scrolled
+        self._split_parent = parent
+        # Start at 50/50 after layout settles
+        def _center():
+            try:
+                w = paned.get_width()
+                if w > 100:
+                    paned.set_position(w // 2)
+            except Exception:
+                pass
+            return False
+        GLib.timeout_add(80, _center)
+        # Start at 50/50 after layout settles
+        def _center():
+            try:
+                w = paned.get_width()
+                if w > 100:
+                    paned.set_position(w // 2)
+            except Exception:
+                pass
+            return False
+        GLib.timeout_add(80, _center)
+
+    def _unsplit(self):
+        paned = getattr(self, "_split_paned", None)
+        parent = getattr(self, "_split_parent", None)
+        if paned is None or parent is None:
+            return
+        # detach the second view first
+        paned.set_end_child(None)
+        paned.set_start_child(None)
+        if isinstance(parent, Gtk.Box):
+            parent.remove(paned)
+            parent.append(self.notebook)
+        elif hasattr(parent, "set_child"):
+            parent.set_child(self.notebook)
+        self._split_paned = None
+        self._split_scrolled = None
+        self._split_parent = None
+        tab = self._active_tab()
+        if tab:
+            tab.view.grab_focus()
 
     def _active_tab(self):
         idx = self.notebook.get_current_page()
