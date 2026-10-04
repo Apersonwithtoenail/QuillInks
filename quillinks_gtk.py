@@ -24,6 +24,22 @@ _STYLE_MGR = GtkSource.StyleSchemeManager.get_default()
 #  THEME — vintage-brown for the first look
 # ══════════════════════════════════════════════════════════════
 
+DARK = {
+    "bg":           "#1e1e1e",
+    "fg":           "#d4d4d4",
+    "accent":       "#6C4AB6",
+    "accent2":      "#5a3d99",
+    "toolbar_bg":   "#2d2d2d",
+    "toolbar_fg":   "#e0e0e0",
+    "tab_bg":       "#252526",
+    "tab_active":   "#1e1e1e",
+    "tab_fg":       "#a0a0a0",
+    "status_bg":    "#2d2d2d",
+    "status_fg":    "#a0a0a0",
+    "border":       "#3d3d3d",
+    "hover":        "#3d3d3d",
+}
+
 VINTAGE = {
     "bg":           "#2b2118",
     "fg":           "#e8d5b7",
@@ -39,6 +55,94 @@ VINTAGE = {
     "border":       "#6b4423",
     "hover":        "#5a3d29",
 }
+
+
+# ══════════════════════════════════════════════════════════════
+#  Config (ported from Tkinter version — pure Python, no UI)
+# ══════════════════════════════════════════════════════════════
+
+import json
+import platform
+
+
+def _config_dir():
+    if os.environ.get("QUILLINKS_PORTABLE") == "1":
+        return Path(__file__).parent / "config"
+    if (Path(__file__).parent / "portable.flag").exists():
+        return Path(__file__).parent / "config"
+    system = platform.system()
+    if system == "Windows":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        return base / "Quillinks"
+    if system == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "Quillinks"
+    return Path.home() / ".config" / "quillinks"
+
+
+_CONFIG_DIR = _config_dir()
+_SETTINGS_FILE = _CONFIG_DIR / "settings.json"
+_RECENT_FILE = _CONFIG_DIR / "recent.json"
+_SESSION_FILE = _CONFIG_DIR / "session.json"
+_MAX_RECENT = 10
+
+DEFAULT_SETTINGS = {
+    "font_family": None,
+    "font_size": 13,
+    "theme": "vintage-brown",
+    "wrap": False,
+    "show_line_numbers": True,
+    "show_whitespace": False,
+    "show_eol": False,
+    "show_right_margin": True,
+    "read_only": False,
+    "geometry": "1100x720",
+    "reopen_session": True,
+    "syntax_highlight": True,
+}
+
+
+def _load_json(path, default):
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return default
+
+
+def _save_json(path, obj):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(obj, indent=2))
+    except Exception:
+        pass
+
+
+def _load_settings():
+    s = dict(DEFAULT_SETTINGS)
+    s.update(_load_json(_SETTINGS_FILE, {}))
+    return s
+
+
+def _save_settings(s):
+    _save_json(_SETTINGS_FILE, s)
+
+
+def _load_recent():
+    return _load_json(_RECENT_FILE, [])[:_MAX_RECENT]
+
+
+def _save_recent(paths):
+    _save_json(_RECENT_FILE, paths[:_MAX_RECENT])
+
+
+def _push_recent(path):
+    if not path:
+        return
+    s = str(Path(path).expanduser().resolve())
+    items = _load_recent()
+    if s in items:
+        items.remove(s)
+    items.insert(0, s)
+    _save_recent(items)
 
 
 def css(t):
@@ -110,46 +214,87 @@ def css(t):
     }}
 
     /* ---- tab bar ---- */
-    tabbar {{
+    notebook > header {{
         background: {t['tab_bg']};
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
     }}
-    tabbar tab {{
+    notebook > header > tabs {{
+        background: {t['tab_bg']};
+        padding: 0 4px;
+    }}
+
+    /* Tab itself — kill ALL default styling */
+    notebook > header > tabs > tab {{
         background: {t['tab_bg']};
         color: {t['tab_fg']};
         border: none;
-        border-radius: 10px 10px 0 0;
+        border-radius: 12px 12px 0 0;
         padding: 8px 18px;
-        margin: 4px 2px 0 2px;
-        transition: all 160ms ease-out;
+        margin: 6px 3px 0 3px;
+        min-height: 24px;
+        box-shadow: none;
+        outline: none;
+        transition: all 180ms cubic-bezier(0.2, 0, 0, 1);
     }}
-    tabbar tab:hover {{
+    notebook > header > tabs > tab:hover {{
         background: {t['hover']};
+        color: {t['fg']};
     }}
-    tabbar tab:selected {{
+    notebook > header > tabs > tab:checked,
+    notebook > header > tabs > tab:selected {{
         background: {t['tab_active']};
         color: {t['fg']};
-        box-shadow: inset 0 2px 0 {t['accent']},
-                    0 -2px 8px rgba(0,0,0,0.3);
+        border-radius: 12px 12px 0 0;
+        box-shadow: inset 0 3px 0 {t['accent']},
+                    0 -3px 10px rgba(0,0,0,0.4);
     }}
-    tabbar tab button {{
+
+    /* Kill the Adwaita underline indicator */
+    notebook > header > tabs > tab > box > indicator,
+    notebook > header > tabs > tab indicator,
+    notebook > header > tabs > tab > indicator {{
+        background: transparent;
+        min-height: 0;
+        min-width: 0;
+        opacity: 0;
+        border: none;
+        box-shadow: none;
+    }}
+
+    /* Tab label + close button */
+    notebook > header > tabs > tab label {{
+        color: inherit;
+    }}
+    notebook > header > tabs > tab button {{
         color: {t['tab_fg']};
         background: transparent;
         border: none;
+        border-radius: 10px;
         min-width: 18px;
         min-height: 18px;
+        padding: 0;
+        margin-left: 6px;
+        box-shadow: none;
+        transition: background 140ms ease-out;
     }}
-    tabbar tab button:hover {{
+    notebook > header > tabs > tab button:hover {{
         background: {t['accent2']};
-        border-radius: 9px;
+        color: #fef6e4;
     }}
 
     /* ---- text area ---- */
+    /* Let GtkSource scheme own the editor background/foreground.
+       Only set font here. */
     textview, textview text {{
-        background: {t['bg']};
-        color: {t['fg']};
         font-family: "Monospace", "DejaVu Sans Mono", monospace;
         font-size: 13px;
-        padding: 8px;
+    }}
+    textview > text {{
+        background: {t['bg']};
+        color: {t['fg']};
     }}
 
     /* ---- status bar ---- */
@@ -157,8 +302,8 @@ def css(t):
         background: {t['status_bg']};
         color: {t['status_fg']};
         border-top: 1px solid {t['border']};
-        padding: 4px 12px;
-        font-size: 11px;
+        padding: 8px 14px;
+        font-size: 12px;
     }}
 
     /* ---- scrollbars ---- */
@@ -176,6 +321,50 @@ def css(t):
     scrollbar trough {{
         background: {t['tab_bg']};
         border-radius: 8px;
+    }}
+
+    /* ---- find bar ---- */
+    .find-bar-wrap {{
+        background: {t['toolbar_bg']};
+        border-top: 1px solid {t['border']};
+    }}
+    .find-bar entry,
+    .find-bar searchentry {{
+        background: {t['tab_bg']};
+        color: {t['fg']};
+        border: 1px solid {t['border']};
+        border-radius: 8px;
+        padding: 6px 10px;
+        min-height: 20px;
+        transition: all 160ms ease-out;
+    }}
+    .find-bar entry:focus,
+    .find-bar searchentry:focus {{
+        border-color: {t['accent']};
+        box-shadow: 0 0 0 2px {t['accent']}33;
+    }}
+    .find-bar button,
+    .find-bar togglebutton {{
+        background: {t['tab_bg']};
+        color: {t['tab_fg']};
+        border: 1px solid {t['border']};
+        border-radius: 8px;
+        padding: 4px 10px;
+        min-width: 28px;
+        transition: all 140ms ease-out;
+    }}
+    .find-bar button:hover,
+    .find-bar togglebutton:hover {{
+        background: {t['hover']};
+    }}
+    .find-bar togglebutton:checked {{
+        background: {t['accent2']};
+        color: #fef6e4;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+    }}
+    .find-status {{
+        color: {t['accent']};
+        font-size: 11px;
     }}
 
     /* ---- popover menus ---- */
@@ -208,6 +397,68 @@ def apply_css(theme):
 
 
 # ══════════════════════════════════════════════════════════════
+#  Custom GtkSource style scheme (matches VINTAGE palette)
+# ══════════════════════════════════════════════════════════════
+
+SCHEME_ID = "quillinks-vintage"
+
+
+def _install_source_scheme():
+    """Write a matching GtkSource XML style scheme to disk so syntax colors
+    follow our VINTAGE theme. Then register its search path."""
+    styles_dir = Path.home() / ".local" / "share" / "gtksourceview-5" / "styles"
+    styles_dir.mkdir(parents=True, exist_ok=True)
+    xml_path = styles_dir / f"{SCHEME_ID}.xml"
+
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+<style-scheme id="quillinks-vintage" name="Quillinks Vintage" version="1.0">
+  <author>Apersonwithtoenail</author>
+  <description>Warm vintage brown — matches the Quillinks UI</description>
+
+  <color name="bg"       value="#2b2118"/>
+  <color name="fg"       value="#e8d5b7"/>
+  <color name="keyword"  value="#d4a373"/>
+  <color name="string"   value="#9b7653"/>
+  <color name="comment"  value="#7a6a55"/>
+  <color name="number"   value="#b8956a"/>
+  <color name="function" value="#c9a961"/>
+  <color name="type"     value="#e0b47f"/>
+  <color name="variable" value="#e8d5b7"/>
+  <color name="constant" value="#c9a961"/>
+  <color name="operator" value="#a68a64"/>
+  <color name="bracket"  value="#f4e4c1"/>
+
+  <style name="text"              foreground="fg"       background="bg"/>
+  <style name="def:keyword"       foreground="keyword"  bold="true"/>
+  <style name="def:statement"     foreground="keyword"/>
+  <style name="def:type"          foreground="type"/>
+  <style name="def:constant"      foreground="constant" bold="true"/>
+  <style name="def:number"        foreground="number"/>
+  <style name="def:function"      foreground="function"/>
+  <style name="def:identifier"    foreground="variable"/>
+  <style name="def:string"        foreground="string"/>
+  <style name="def:comment"       foreground="comment"  italic="true"/>
+  <style name="def:operator"      foreground="operator"/>
+  <style name="def:special-char"  foreground="keyword"/>
+  <style name="def:preprocessor"  foreground="keyword"  bold="true"/>
+  <style name="def:builtin"       foreground="type"/>
+
+  <style name="def:bracket-match"  foreground="#f4e4c1" background="#6b4423" bold="true"/>
+  <style name="def:current-line"   background="#1f1810"/>
+  <style name="def:selection"      background="#6b4423"/>
+  <style name="def:right-margin"   foreground="#4a3828"/>
+  <style name="def:line-numbers"   foreground="#8b7355" background="#1f1810"/>
+  <style name="def:cursor"         foreground="#d4a373"/>
+</style-scheme>
+"""
+    xml_path.write_text(xml)
+
+    mgr = GtkSource.StyleSchemeManager.get_default()
+    mgr.append_search_path(str(styles_dir))
+    return mgr.get_scheme(SCHEME_ID)
+
+
+# ══════════════════════════════════════════════════════════════
 #  Editor tab — a text view + scroll
 # ══════════════════════════════════════════════════════════════
 
@@ -220,17 +471,20 @@ class EditorTab(Gtk.Box):
         self.path = Path(path).expanduser().resolve() if path else None
         self.dirty = False
 
-        # GtkSource.Buffer with our style scheme
+        # GtkSource.Buffer with our custom vintage scheme
         self.buffer = GtkSource.Buffer()
-        scheme = _STYLE_MGR.get_scheme("oblivion")
+        scheme = _install_source_scheme() or _STYLE_MGR.get_scheme("oblivion")
         if scheme:
             self.buffer.set_style_scheme(scheme)
         self.buffer.set_highlight_matching_brackets(True)
 
+        # Buffer state
+        self.line_ending = "LF"
+        self.has_bom = False
+
         # Load file
         if self.path and self.path.exists():
-            raw = self.path.read_text(errors="replace")
-            self.buffer.set_text(raw)
+            self._load_from_disk()
 
         # Auto-detect language by extension
         self._apply_language()
@@ -257,6 +511,42 @@ class EditorTab(Gtk.Box):
 
         self.buffer.connect("changed", self._on_changed)
 
+    def _load_from_disk(self):
+        raw = self.path.read_bytes()
+        if b"\r\n" in raw:
+            self.line_ending = "CRLF"
+        elif b"\r" in raw and b"\n" not in raw:
+            self.line_ending = "CR"
+        else:
+            self.line_ending = "LF"
+        if raw.startswith(b"\xef\xbb\xbf"):
+            self.has_bom = True
+            raw = raw[3:]
+        text = raw.decode("utf-8", errors="replace")
+        self.buffer.set_text(text)
+        self.dirty = False
+
+    def save_to_disk(self):
+        if not self.path:
+            return False
+        text = self.buffer.get_text(
+            self.buffer.get_start_iter(),
+            self.buffer.get_end_iter(),
+            False)
+        if self.line_ending == "CRLF":
+            text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+        elif self.line_ending == "CR":
+            text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r")
+        raw = text.encode("utf-8")
+        if self.has_bom:
+            raw = b"\xef\xbb\xbf" + raw
+        try:
+            self.path.write_bytes(raw)
+        except OSError as e:
+            return False, str(e)
+        self.dirty = False
+        return True, ""
+
     def _apply_language(self):
         if not self.path:
             lang = _LANG_MGR.get_language("markdown")
@@ -276,15 +566,265 @@ class EditorTab(Gtk.Box):
 
 
 # ══════════════════════════════════════════════════════════════
+#  Find / Replace bar (bottom overlay)
+# ══════════════════════════════════════════════════════════════
+
+class FindBar(Gtk.Revealer):
+    """Bottom find/replace bar. Uses native GtkSource.SearchContext."""
+
+    def __init__(self, window):
+        super().__init__()
+        self.window = window
+        self.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
+        self.set_transition_duration(180)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        outer.add_css_class("find-bar")
+        outer.set_margin_start(12)
+        outer.set_margin_end(12)
+        outer.set_margin_top(8)
+        outer.set_margin_bottom(8)
+
+        # --- search row ---
+        self.search_entry = Gtk.SearchEntry()
+        self.search_entry.set_placeholder_text("Find…")
+        self.search_entry.set_hexpand(True)
+        self.search_entry.connect("search-changed", self._on_search_changed)
+        self.search_entry.connect("activate", lambda *_: self.find_next())
+        outer.append(self.search_entry)
+
+        # options
+        self.case_btn = self._toggle("Aa", "Case sensitive", self._on_search_changed)
+        outer.append(self.case_btn)
+        self.word_btn = self._toggle("Ab", "Whole word", self._on_search_changed)
+        outer.append(self.word_btn)
+        self.regex_btn = self._toggle(".*", "Regex", self._on_search_changed)
+        outer.append(self.regex_btn)
+
+        # nav
+        prev = Gtk.Button(label="▲")
+        prev.set_tooltip_text("Previous")
+        prev.connect("clicked", lambda *_: self.find_prev())
+        outer.append(prev)
+
+        nxt = Gtk.Button(label="▼")
+        nxt.set_tooltip_text("Next")
+        nxt.connect("clicked", lambda *_: self.find_next())
+        outer.append(nxt)
+
+        close = Gtk.Button(label="✕")
+        close.connect("clicked", lambda *_: self.hide_bar())
+        outer.append(close)
+
+        # --- replace row ---
+        replace_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        replace_box.set_margin_start(12)
+        replace_box.set_margin_end(12)
+        replace_box.set_margin_bottom(8)
+        replace_box.add_css_class("find-bar")
+
+        self.replace_entry = Gtk.Entry()
+        self.replace_entry.set_placeholder_text("Replace…")
+        self.replace_entry.set_hexpand(True)
+        self.replace_entry.connect("activate", lambda *_: self.replace_one())
+        replace_box.append(self.replace_entry)
+
+        rep_one = Gtk.Button(label="Replace")
+        rep_one.connect("clicked", lambda *_: self.replace_one())
+        replace_box.append(rep_one)
+
+        rep_all = Gtk.Button(label="Replace All")
+        rep_all.connect("clicked", lambda *_: self.replace_all())
+        replace_box.append(rep_all)
+
+        # --- status label ---
+        self.status_label = Gtk.Label(label="")
+        self.status_label.add_css_class("find-status")
+        self.status_label.set_halign(Gtk.Align.END)
+        self.status_label.set_margin_end(16)
+        self.status_label.set_margin_bottom(4)
+
+        # --- wrap ---
+        wrapper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        wrapper.add_css_class("find-bar-wrap")
+        wrapper.append(outer)
+        wrapper.append(replace_box)
+        wrapper.append(self.status_label)
+        self.set_child(wrapper)
+
+        self._replace_visible = False
+
+    def _toggle(self, label, tooltip, cb):
+        b = Gtk.ToggleButton(label=label)
+        b.set_tooltip_text(tooltip)
+        b.connect("toggled", lambda *_: cb())
+        return b
+
+    # ---------- show / hide ----------
+    def toggle_bar(self, replace=False):
+        # Ctrl+F pressed while already shown → close
+        if self.get_reveal_child():
+            self.hide_bar()
+            return
+        self.set_reveal_child(True)
+        if replace:
+            self._show_replace()
+        self.search_entry.grab_focus()
+        self._on_search_changed()
+
+    def show_bar(self, replace=False):
+        self.set_reveal_child(True)
+        if replace:
+            self._show_replace()
+        self.search_entry.grab_focus()
+        self._on_search_changed()
+
+    def hide_bar(self):
+        self.set_reveal_child(False)
+        tab = self.window._active_tab()
+        if tab:
+            tab.view.grab_focus()
+
+    def _show_replace(self):
+        self._replace_visible = True
+        self.replace_entry.set_visible(True)
+
+    # ---------- context helpers ----------
+    def _active_context(self):
+        tab = self.window._active_tab()
+        if not tab:
+            return None, None
+        settings = tab.buffer.get_search_context().get_settings() \
+            if hasattr(tab.buffer, "get_search_context") else None
+        # Rebuild fresh each time to pick up settings changes.
+        # Use set_property — method names differ across GtkSource versions.
+        s = GtkSource.SearchSettings()
+        s.set_property("case-sensitive", self.case_btn.get_active())
+        s.set_property("whole-word-matches", self.word_btn.get_active())
+        s.set_property("regex-enabled", self.regex_btn.get_active())
+        s.set_property("search-text", self.search_entry.get_text())
+        ctx = GtkSource.SearchContext.new(tab.buffer, s)
+        ctx.set_highlight(True)
+        return tab, ctx
+
+    # ---------- events ----------
+    def _on_search_changed(self, *_):
+        tab, ctx = self._active_context()
+        if not tab or not self.search_entry.get_text():
+            self.status_label.set_text("")
+            return
+        # Highlight all by wrapping through context
+        buf = tab.buffer
+        start = buf.get_start_iter()
+        count = 0
+        while True:
+            match = ctx.forward(start)
+            if match is None or match[0] is None:
+                break
+            start = match[1]
+            count += 1
+            if count > 5000:
+                break
+        if count == 0:
+            self.status_label.set_text("no matches")
+        else:
+            self.status_label.set_text(f"{count} match{'es' if count != 1 else ''}")
+
+    def find_next(self):
+        tab, ctx = self._active_context()
+        if not tab: return
+        buf = tab.buffer
+        insert = buf.get_iter_at_mark(buf.get_insert())
+        match = ctx.forward(insert)
+        if match is None or match[0] is None:
+            # wrap
+            match = ctx.forward(buf.get_start_iter())
+        if match and match[0]:
+            buf.select_range(match[0], match[1])
+            tab.view.scroll_to_iter(match[0], 0.0, False, 0.0, 0.0)
+
+    def find_prev(self):
+        tab, ctx = self._active_context()
+        if not tab: return
+        buf = tab.buffer
+        insert = buf.get_iter_at_mark(buf.get_insert())
+        match = ctx.backward(insert)
+        if match is None or match[0] is None:
+            match = ctx.backward(buf.get_end_iter())
+        if match and match[0]:
+            buf.select_range(match[0], match[1])
+            tab.view.scroll_to_iter(match[0], 0.0, False, 0.0, 0.0)
+
+    def replace_one(self):
+        tab, ctx = self._active_context()
+        if not tab: return
+        buf = tab.buffer
+        match = ctx.get_match()
+        if match is None:
+            self.find_next()
+            return
+        # get match location from current selection
+        try:
+            s = buf.get_iter_at_mark(buf.get_selection_bound())
+            e = buf.get_iter_at_mark(buf.get_insert())
+            if s.get_offset() > e.get_offset():
+                s, e = e, s
+            text = self.replace_entry.get_text()
+            buf.begin_user_action()
+            buf.delete(s, e)
+            buf.insert(s, text)
+            buf.end_user_action()
+        except Exception:
+            pass
+        self.find_next()
+
+    def replace_all(self):
+        tab, ctx = self._active_context()
+        if not tab: return
+        buf = tab.buffer
+        replacement = self.replace_entry.get_text()
+        count = 0
+        buf.begin_user_action()
+        # iterate over all matches, replacing
+        start = buf.get_start_iter()
+        while True:
+            match = ctx.forward(start)
+            if match is None or match[0] is None:
+                break
+            s, e = match
+            # insert replacement
+            buf.delete(s, e)
+            buf.insert(s, replacement)
+            # move to end of inserted replacement
+            start = s.copy()
+            start.forward_chars(len(replacement))
+            count += 1
+            if count > 5000:
+                break
+        buf.end_user_action()
+        self.status_label.set_text(f"replaced {count}")
+
+
+# ══════════════════════════════════════════════════════════════
 #  Main window
 # ══════════════════════════════════════════════════════════════
 
 class QuillinksWindow(Gtk.ApplicationWindow):
-    def __init__(self, app):
+    def __init__(self, app, initial_paths=None):
         super().__init__(application=app, title="Quillinks")
-        self.set_default_size(1100, 720)
+        self.settings = _load_settings()
+        self._initial_paths = initial_paths or []
+
+        # Restore geometry
+        try:
+            w, h = self.settings.get("geometry", "1100x720").split("x")
+            self.set_default_size(int(w), int(h))
+        except Exception:
+            self.set_default_size(1100, 720)
 
         self.status = None  # created below; guarded in _refresh_status
+        self._font_size = 13
+        self._read_only = False
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_child(root)
@@ -304,6 +844,8 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Save", self.on_save),
             ("Save As…", self.on_save_as),
             ("-", None),
+            ("Revert", self.on_revert),
+            ("-", None),
             ("Quit", self.on_quit),
         ]))
         toolbar.append(self._make_menu("Edit", [
@@ -316,9 +858,22 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Select All", lambda *_: self._do("select_all")),
         ]))
         toolbar.append(self._make_menu("View", [
-            ("Zoom In", None),
-            ("Zoom Out", None),
-            ("Reset Zoom", None),
+            ("Line Numbers", self.toggle_line_numbers, True, True),
+            ("Word Wrap", self.toggle_word_wrap, True, False),
+            ("Highlight Current Line", self.toggle_highlight_line, True, True),
+            ("Right Margin (col 80)", self.toggle_right_margin, True, True),
+            ("Bracket Matching", self.toggle_bracket_match, True, True),
+            ("Auto-indent", self.toggle_auto_indent, True, True),
+            ("Show Whitespace", self.toggle_whitespace, True, False),
+            ("Show EOL Markers", self.toggle_eol_markers, True, False),
+            "-",
+            ("Read-Only", self.toggle_read_only, True, False),
+            "-",
+            ("Zoom In", self.zoom_in),
+            ("Zoom Out", self.zoom_out),
+            ("Reset Zoom", self.zoom_reset),
+            "-",
+            ("Fullscreen", self.toggle_fullscreen, True, False),
         ]))
         toolbar.append(self._make_menu("Help", [
             ("About", self.on_about),
@@ -345,8 +900,22 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.notebook.connect("switch-page", self._on_tab_switch)
 
         self.tabs = []
-        self._add_tab()
+        # Restore session or open files from CLI args
+        to_open = list(self._initial_paths)
+        if not to_open and self.settings.get("reopen_session", True):
+            session = _load_json(_SESSION_FILE, {})
+            to_open = [p for p in session.get("open_files", []) if p and Path(p).exists()]
+        if to_open:
+            for path in to_open:
+                self._add_tab(path)
+        else:
+            self._add_tab()
         root.append(self.notebook)
+
+        # ---- find bar (hidden until Ctrl+F) ----
+        self.find_bar = FindBar(self)
+        self.find_bar.set_reveal_child(False)
+        root.append(self.find_bar)
 
         # ---- status bar ----
         self.status = Gtk.Label(label=" Ready")
@@ -354,6 +923,26 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.status.set_halign(Gtk.Align.START)
         self.status.set_xalign(0)
         root.append(self.status)
+
+        # ---- keyboard shortcuts ----
+        controller = Gtk.ShortcutController()
+        controller.set_scope(Gtk.ShortcutScope.GLOBAL)
+
+        def _bind(keys, cb):
+            trigger = Gtk.ShortcutTrigger.parse_string(keys)
+            action = Gtk.CallbackAction.new(lambda *a: (cb(), True)[1])
+            controller.add_shortcut(Gtk.Shortcut.new(trigger, action))
+
+        _bind("<Control>f", lambda: self.find_bar.toggle_bar(replace=False))
+        _bind("<Control>h", lambda: self.find_bar.show_bar(replace=True))
+        _bind("<Control>r", lambda: self.find_bar.show_bar(replace=True))
+        _bind("Escape", lambda: self.find_bar.hide_bar())
+        _bind("<Control>n", self.on_new)
+        _bind("<Control>o", self.on_open)
+        _bind("<Control>s", self.on_save)
+        _bind("<Control>q", self.on_quit)
+
+        self.add_controller(controller)
 
         self._refresh_status()
         self.connect("close-request", self._on_close)
@@ -368,22 +957,122 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         vbox.set_margin_end(4)
         vbox.set_margin_top(4)
         vbox.set_margin_bottom(4)
-        for name, cb in items:
-            if name == "-":
+        for item in items:
+            # support: "label", "-", (label, cb), (label, cb, True, state)
+            if item == "-":
                 vbox.append(Gtk.Separator())
                 continue
-            b = Gtk.Button(label=name)
-            b.set_has_frame(False)
-            b.set_halign(Gtk.Align.FILL)
-            b.get_child().set_xalign(0)
-            if cb:
-                b.connect("clicked", lambda _b, c=cb: (c(), popover.popdown()))
+            if isinstance(item, str):
+                name, cb, is_check, initial = item, None, False, False
+            elif len(item) == 2:
+                name, cb = item
+                is_check, initial = False, False
             else:
-                b.set_sensitive(False)
-            vbox.append(b)
+                name, cb, is_check, initial = item
+
+            if is_check:
+                chk = Gtk.CheckButton(label=name)
+                chk.set_active(initial)
+                if cb:
+                    chk.connect("toggled", lambda b, c=cb: c(b.get_active()))
+                vbox.append(chk)
+            else:
+                b = Gtk.Button(label=name)
+                b.set_has_frame(False)
+                b.set_halign(Gtk.Align.FILL)
+                b.get_child().set_xalign(0)
+                if cb:
+                    b.connect("clicked", lambda _b, c=cb: (c(None), popover.popdown()))
+                else:
+                    b.set_sensitive(False)
+                vbox.append(b)
         popover.set_child(vbox)
         btn.set_popover(popover)
         return btn
+
+    # ---------- View toggles ----------
+
+    def _tabs_iter(self):
+        for t in self.tabs:
+            yield t
+
+    def toggle_line_numbers(self, on):
+        for t in self._tabs_iter():
+            t.view.set_show_line_numbers(bool(on))
+
+    def toggle_word_wrap(self, on):
+        mode = Gtk.WrapMode.WORD if on else Gtk.WrapMode.NONE
+        for t in self._tabs_iter():
+            t.view.set_wrap_mode(mode)
+
+    def toggle_highlight_line(self, on):
+        for t in self._tabs_iter():
+            t.view.set_highlight_current_line(bool(on))
+
+    def toggle_right_margin(self, on):
+        for t in self._tabs_iter():
+            t.view.set_show_right_margin(bool(on))
+
+    def toggle_bracket_match(self, on):
+        for t in self._tabs_iter():
+            t.buffer.set_highlight_matching_brackets(bool(on))
+
+    def toggle_auto_indent(self, on):
+        for t in self._tabs_iter():
+            t.view.set_auto_indent(bool(on))
+
+    def toggle_whitespace(self, on):
+        flag = (GtkSource.SpaceDrawerFlags.TAB |
+                GtkSource.SpaceDrawerFlags.SPACE |
+                GtkSource.SpaceDrawerFlags.LEADING)
+        for t in self._tabs_iter():
+            if on:
+                t.view.set_draw_spaces(flag)
+            else:
+                t.view.set_draw_spaces(0)
+
+    def toggle_eol_markers(self, on):
+        for t in self._tabs_iter():
+            t.view.set_draw_spaces(GtkSource.SpaceDrawerFlags.NEWLINE) if on else None
+            if not on:
+                # only clear NEWLINE bit, keep others
+                current = t.view.get_draw_spaces()
+                t.view.set_draw_spaces(current & ~GtkSource.SpaceDrawerFlags.NEWLINE)
+
+    def toggle_read_only(self, on):
+        for t in self._tabs_iter():
+            t.view.set_editable(not on)
+        self._read_only = bool(on)
+        self._refresh_status()
+
+    # ---------- Zoom ----------
+
+    def _apply_font_css(self):
+        # Font size lives on the textview via a class
+        provider = Gtk.CssProvider()
+        size = getattr(self, "_font_size", 13)
+        provider.load_from_string(f"textview {{ font-size: {size}px; }}")
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+
+    def zoom_in(self, *_):
+        self._font_size = min(28, getattr(self, "_font_size", 13) + 1)
+        self._apply_font_css()
+
+    def zoom_out(self, *_):
+        self._font_size = max(8, getattr(self, "_font_size", 13) - 1)
+        self._apply_font_css()
+
+    def zoom_reset(self, *_):
+        self._font_size = 13
+        self._apply_font_css()
+
+    def toggle_fullscreen(self, on):
+        if on:
+            self.fullscreen()
+        else:
+            self.unfullscreen()
 
     def _active_tab(self):
         idx = self.notebook.get_current_page()
@@ -450,7 +1139,8 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         cursor = tab.buffer.get_iter_at_mark(tab.buffer.get_insert())
         line = cursor.get_line() + 1
         col = cursor.get_line_offset() + 1
-        self.status.set_text(f" {name}{dirty}  ·  Ln {line}, Col {col}  ·  vintage-brown")
+        ro = "  ·  RO" if getattr(self, "_read_only", False) else ""
+        self.status.set_text(f" {name}{dirty}  ·  Ln {line}, Col {col}{ro}  ·  vintage-brown")
 
     # ---------- actions ----------
 
@@ -463,9 +1153,13 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             try:
                 f = d.open_finish(result)
                 if f:
-                    self._add_tab(f.get_path())
-            except Exception:
+                    path = f.get_path()
+                    self._add_tab(path)
+                    _push_recent(path)
+            except GLib.Error:
                 pass
+            except Exception as e:
+                self._show_error("Open failed", str(e))
         dialog.open(self, None, _done)
 
     def on_save(self, *_):
@@ -474,11 +1168,38 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             return
         if not tab.path:
             return self.on_save_as()
-        tab.path.write_text(tab.buffer.get_text(
-            tab.buffer.get_start_iter(),
-            tab.buffer.get_end_iter(), False))
-        tab.dirty = False
-        tab._label.set_text(tab.title())
+        ok, err = tab.save_to_disk()
+        if ok:
+            tab._label.set_text(tab.title())
+            _push_recent(tab.path)
+        else:
+            self._show_error("Save failed", err)
+
+    def on_revert(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.path:
+            return
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading="Revert file?",
+            body=f"Discard changes and reload {tab.path.name}?",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("revert", "Revert")
+        dialog.set_response_appearance("revert", Adw.ResponseAppearance.DESTRUCTIVE)
+
+        def _on_resp(d, resp):
+            if resp == "revert":
+                tab._load_from_disk()
+                tab._label.set_text(tab.title())
+
+        dialog.connect("response", _on_resp)
+        dialog.present()
+
+    def _show_error(self, title, msg):
+        d = Adw.MessageDialog(transient_for=self, heading=title, body=str(msg))
+        d.add_response("ok", "OK")
+        d.present()
 
     def on_save_as(self, *_):
         tab = self._active_tab()
@@ -516,7 +1237,58 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             self.simple_btn.set_label("◀ Simple Mode")
 
     def _on_close(self, *_):
-        return False
+        # Check every tab for unsaved changes
+        dirty_tabs = [t for t in self.tabs if t.dirty]
+        if dirty_tabs:
+            dialog = Adw.MessageDialog(
+                transient_for=self,
+                heading="Unsaved changes",
+                body=f"{len(dirty_tabs)} tab(s) have unsaved changes. Save before closing?",
+            )
+            dialog.add_response("cancel", "Cancel")
+            dialog.add_response("discard", "Discard")
+            dialog.add_response("save", "Save All")
+            dialog.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
+            dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+            result = {"choice": "cancel"}
+
+            def _on_response(_d, resp):
+                result["choice"] = resp
+
+            dialog.connect("response", _on_response)
+            dialog.present()
+            # Since Adw.MessageDialog is async, we cancel close here and re-trigger
+            def _wait():
+                if result["choice"] == "cancel":
+                    return
+                if result["choice"] == "save":
+                    for tab in dirty_tabs:
+                        if tab.path:
+                            tab.save_to_disk()
+                        else:
+                            self._active_tab = tab
+                            self.on_save_as()
+                self._do_close()
+            GLib.timeout_add(100, _wait)
+            return True
+        self._do_close()
+        return True
+
+    def _do_close(self):
+        # Save geometry
+        try:
+            w = self.get_width()
+            h = self.get_height()
+            self.settings["geometry"] = f"{w}x{h}"
+        except Exception:
+            pass
+        # Save session
+        open_files = [str(t.path) for t in self.tabs if t.path]
+        _save_json(_SESSION_FILE, {"open_files": open_files})
+        # Save settings
+        _save_settings(self.settings)
+        # Destroy
+        self.get_application().quit()
 
 
 # ══════════════════════════════════════════════════════════════
@@ -527,11 +1299,19 @@ class QuillinksApp(Gtk.Application):
     def __init__(self):
         super().__init__(application_id="com.apwith.quillinks.gtk")
         self.win = None
+        self._initial_paths = []
+
+    def do_handle_local_options(self, options):
+        # Extract file args from sys.argv
+        for arg in sys.argv[1:]:
+            if not arg.startswith("-") and Path(arg).exists():
+                self._initial_paths.append(arg)
+        return -1
 
     def do_activate(self):
         apply_css(VINTAGE)
         if self.win is None:
-            self.win = QuillinksWindow(self)
+            self.win = QuillinksWindow(self, initial_paths=self._initial_paths)
         self.win.present()
 
 
