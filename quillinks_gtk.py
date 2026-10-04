@@ -939,9 +939,14 @@ class FindBar(Gtk.Revealer):
 class QuillinksWindow(Gtk.ApplicationWindow):
     def __init__(self, app, initial_paths=None):
         super().__init__(application=app, title="Quillinks")
+        try:
+            self.set_icon_name("quillinks")
+        except Exception:
+            pass
         self.settings = _load_settings()
         self._initial_paths = initial_paths or []
         self._install_shortcuts()
+        self._ensure_desktop_file()
         _drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
         _drop.connect("drop", self._on_drop)
         self.add_controller(_drop)
@@ -2406,12 +2411,45 @@ class QuillinksWindow(Gtk.ApplicationWindow):
 
     # ---------- File association ----------
 
-    def install_file_association(self):
+    def _ensure_desktop_file(self):
+        # GNOME matches the window's application_id to a .desktop file
+        # named after it. This is what makes the title-bar icon show.
+        apps = Path.home() / ".local" / "share" / "applications"
+        apps.mkdir(parents=True, exist_ok=True)
+        here = Path(__file__).resolve()
+        py = sys.executable
+        content = (
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Quillinks\n"
+            "Comment=Modern GTK4 text editor\n"
+            f"Exec={py} {here} %F\n"
+            "Icon=quillinks\n"
+            "Terminal=false\n"
+            "Categories=Utility;TextEditor;\n"
+            "MimeType=text/plain;text/x-python;text/markdown;\n"
+            "StartupNotify=true\n"
+            "StartupWMClass=com.apwith.quillinks.gtk\n"
+        )
+        # GNOME matches application_id -> .desktop name
+        for name in ("com.apwith.quillinks.gtk.desktop", "quillinks.desktop"):
+            try:
+                (apps / name).write_text(content)
+            except Exception:
+                pass
+        import subprocess as _sp
+        try:
+            _sp.Popen(["update-desktop-database", str(apps)],
+                      stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+        except Exception:
+            pass
+
+    def install_file_association(self, *_):
         apps_dir = Path.home() / ".local" / "share" / "applications"
         apps_dir.mkdir(parents=True, exist_ok=True)
         here = Path(__file__).resolve()
         py = sys.executable
-        icon = "accessories-text-editor"
+        icon = "quillinks"
         desktop = apps_dir / "quillinks.desktop"
         content = (
             "[Desktop Entry]\n"
@@ -2635,7 +2673,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
     def on_about(self, *_):
         about = Adw.AboutWindow(
             application_name="Quillinks",
-            application_icon="accessories-text-editor",
+            application_icon="quillinks",
             version="0.3.0-gtk",
             developer_name="Apersonwithtoenail",
             comments="A modern text editor. GTK4 edition.",
