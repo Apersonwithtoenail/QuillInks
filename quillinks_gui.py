@@ -778,6 +778,7 @@ class QuillinksGUI:
 
         outer = tk.Frame(self.root)
         outer.pack(fill="both", expand=True)
+        self._outer = outer
         self.notebook = ttk.Notebook(outer)
         self.notebook.pack(fill="both", expand=True)
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_switch)
@@ -1383,10 +1384,25 @@ class QuillinksGUI:
 
         # --- Notebook (tabs) ---
         try:
+            style.layout("TNotebook", [
+                ("TNotebook.client", {"sticky": "nswe"})
+            ])
             style.configure("TNotebook",
                             background=bg,
+                            bordercolor=bg,
+                            lightcolor=bg,
+                            darkcolor=bg,
                             borderwidth=0,
-                            tabmargins=(6, 4, 6, 0))
+                            highlightthickness=0,
+                            tabmargins=(6, 4, 0, 0))
+            # Kill the pane border too
+            style.layout("TNotebook.Tab", [
+                ("TNotebook.tab", {"sticky": "nswe", "children": [
+                    ("TNotebook.padding", {"side": "top", "sticky": "nswe", "children": [
+                        ("TNotebook.label", {"side": "top", "sticky": ""})
+                    ]})
+                ]})
+            ])
             style.configure("TNotebook.Tab",
                             background=sbg,
                             foreground=sfg,
@@ -1490,6 +1506,7 @@ class QuillinksGUI:
             self._status_container.config(bg=sbg)
             self._status_rim.config(bg=(extras["menubar_hover"] if extras else "#555555"))
             self._topbar_rim.config(bg=(extras["menu_bg"] if extras else "#0a0a0a"))
+            self._outer.config(bg=bg)
         except Exception:
             pass
 
