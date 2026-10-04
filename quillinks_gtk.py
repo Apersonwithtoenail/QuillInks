@@ -95,6 +95,9 @@ DEFAULT_SETTINGS = {
     "show_eol": False,
     "show_right_margin": True,
     "read_only": False,
+    "highlight_line": True,
+    "bracket_match": True,
+    "auto_indent": True,
     "geometry": "1100x720",
     "reopen_session": True,
     "syntax_highlight": True,
@@ -827,8 +830,8 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             self.set_default_size(1100, 720)
 
         self.status = None  # created below; guarded in _refresh_status
-        self._font_size = 13
-        self._read_only = False
+        self._font_size = int(self.settings.get("font_size", 13))
+        self._read_only = bool(self.settings.get("read_only", False))
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_child(root)
@@ -876,16 +879,16 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Spaces to Tabs", self.spaces_to_tabs),
         ]))
         toolbar.append(self._make_menu("View", [
-            ("Line Numbers", self.toggle_line_numbers, True, True),
-            ("Word Wrap", self.toggle_word_wrap, True, False),
-            ("Highlight Current Line", self.toggle_highlight_line, True, True),
-            ("Right Margin (col 80)", self.toggle_right_margin, True, True),
-            ("Bracket Matching", self.toggle_bracket_match, True, True),
-            ("Auto-indent", self.toggle_auto_indent, True, True),
-            ("Show Whitespace", self.toggle_whitespace, True, False),
-            ("Show EOL Markers", self.toggle_eol_markers, True, False),
+            ("Line Numbers", self.toggle_line_numbers, True, self.settings.get("show_line_numbers", True)),
+            ("Word Wrap", self.toggle_word_wrap, True, self.settings.get("wrap", False)),
+            ("Highlight Current Line", self.toggle_highlight_line, True, self.settings.get("highlight_line", True)),
+            ("Right Margin (col 80)", self.toggle_right_margin, True, self.settings.get("show_right_margin", True)),
+            ("Bracket Matching", self.toggle_bracket_match, True, self.settings.get("bracket_match", True)),
+            ("Auto-indent", self.toggle_auto_indent, True, self.settings.get("auto_indent", True)),
+            ("Show Whitespace", self.toggle_whitespace, True, self.settings.get("show_whitespace", False)),
+            ("Show EOL Markers", self.toggle_eol_markers, True, self.settings.get("show_eol", False)),
             "-",
-            ("Read-Only", self.toggle_read_only, True, False),
+            ("Read-Only", self.toggle_read_only, True, self.settings.get("read_only", False)),
             "-",
             ("Zoom In", self.zoom_in),
             ("Zoom Out", self.zoom_out),
@@ -1015,6 +1018,28 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         btn.set_popover(popover)
         return btn
 
+    def _apply_whitespace(self, view):
+        st = GtkSource.SpaceTypeFlags
+        types = st.NONE
+        if self.settings.get("show_whitespace"):
+            types |= st.SPACE | st.TAB | st.NBSP
+        if self.settings.get("show_eol"):
+            types |= st.NEWLINE
+        d = view.get_space_drawer()
+        d.set_types_for_locations(GtkSource.SpaceLocationFlags.ALL, types)
+        d.set_enable_matrix(int(types) != 0)
+
+    def _apply_settings_to_tab(self, tab):
+        s = self.settings
+        tab.view.set_show_line_numbers(bool(s.get("show_line_numbers", True)))
+        tab.view.set_wrap_mode(Gtk.WrapMode.WORD if s.get("wrap") else Gtk.WrapMode.NONE)
+        tab.view.set_highlight_current_line(bool(s.get("highlight_line", True)))
+        tab.view.set_show_right_margin(bool(s.get("show_right_margin", True)))
+        tab.buffer.set_highlight_matching_brackets(bool(s.get("bracket_match", True)))
+        tab.view.set_auto_indent(bool(s.get("auto_indent", True)))
+        tab.view.set_editable(not s.get("read_only", False))
+        self._apply_whitespace(tab.view)
+
     # ---------- View toggles ----------
 
     def _tabs_iter(self):
@@ -1022,49 +1047,48 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             yield t
 
     def toggle_line_numbers(self, on):
+        self.settings["show_line_numbers"] = bool(on)
         for t in self._tabs_iter():
             t.view.set_show_line_numbers(bool(on))
 
     def toggle_word_wrap(self, on):
+        self.settings["wrap"] = bool(on)
         mode = Gtk.WrapMode.WORD if on else Gtk.WrapMode.NONE
         for t in self._tabs_iter():
             t.view.set_wrap_mode(mode)
 
     def toggle_highlight_line(self, on):
+        self.settings["highlight_line"] = bool(on)
         for t in self._tabs_iter():
             t.view.set_highlight_current_line(bool(on))
 
     def toggle_right_margin(self, on):
+        self.settings["show_right_margin"] = bool(on)
         for t in self._tabs_iter():
             t.view.set_show_right_margin(bool(on))
 
     def toggle_bracket_match(self, on):
+        self.settings["bracket_match"] = bool(on)
         for t in self._tabs_iter():
             t.buffer.set_highlight_matching_brackets(bool(on))
 
     def toggle_auto_indent(self, on):
+        self.settings["auto_indent"] = bool(on)
         for t in self._tabs_iter():
             t.view.set_auto_indent(bool(on))
 
     def toggle_whitespace(self, on):
-        flag = (GtkSource.SpaceDrawerFlags.TAB |
-                GtkSource.SpaceDrawerFlags.SPACE |
-                GtkSource.SpaceDrawerFlags.LEADING)
+        self.settings["show_whitespace"] = bool(on)
         for t in self._tabs_iter():
-            if on:
-                t.view.set_draw_spaces(flag)
-            else:
-                t.view.set_draw_spaces(0)
+            self._apply_whitespace(t.view)
 
     def toggle_eol_markers(self, on):
+        self.settings["show_eol"] = bool(on)
         for t in self._tabs_iter():
-            t.view.set_draw_spaces(GtkSource.SpaceDrawerFlags.NEWLINE) if on else None
-            if not on:
-                # only clear NEWLINE bit, keep others
-                current = t.view.get_draw_spaces()
-                t.view.set_draw_spaces(current & ~GtkSource.SpaceDrawerFlags.NEWLINE)
+            self._apply_whitespace(t.view)
 
     def toggle_read_only(self, on):
+        self.settings["read_only"] = bool(on)
         for t in self._tabs_iter():
             t.view.set_editable(not on)
         self._read_only = bool(on)
@@ -1083,14 +1107,17 @@ class QuillinksWindow(Gtk.ApplicationWindow):
 
     def zoom_in(self, *_):
         self._font_size = min(28, getattr(self, "_font_size", 13) + 1)
+        self.settings["font_size"] = self._font_size
         self._apply_font_css()
 
     def zoom_out(self, *_):
         self._font_size = max(8, getattr(self, "_font_size", 13) - 1)
+        self.settings["font_size"] = self._font_size
         self._apply_font_css()
 
     def zoom_reset(self, *_):
         self._font_size = 13
+        self.settings["font_size"] = self._font_size
         self._apply_font_css()
 
     def toggle_fullscreen(self, on):
@@ -1411,6 +1438,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.notebook.set_current_page(page)
         self.tabs.append(tab)
         tab._label = label
+        self._apply_settings_to_tab(tab)
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         key_ctrl.connect("key-pressed", self._on_auto_pair)
