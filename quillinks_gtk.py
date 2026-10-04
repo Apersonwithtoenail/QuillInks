@@ -520,6 +520,9 @@ class EditorTab(Gtk.Box):
         # Buffer state
         self.line_ending = "LF"
         self.has_bom = False
+        self.encoding = "utf-8"
+        self._backed_up = False
+        self._last_saved_mtime = 0
 
         # Load file
         if self.path and self.path.exists():
@@ -562,7 +565,12 @@ class EditorTab(Gtk.Box):
         if raw.startswith(b"\xef\xbb\xbf"):
             self.has_bom = True
             raw = raw[3:]
-        text = raw.decode("utf-8", errors="replace")
+        try:
+            text = raw.decode("utf-8")
+            self.encoding = "utf-8"
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+            self.encoding = "latin-1"
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         self.buffer.set_text(text)
         self.dirty = False
@@ -580,14 +588,37 @@ class EditorTab(Gtk.Box):
             text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
         elif self.line_ending == "CR":
             text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r")
-        raw = text.encode("utf-8")
-        if self.has_bom:
+
+        enc = getattr(self, "encoding", "utf-8")
+        try:
+            raw = text.encode(enc)
+        except Exception:
+            enc = "utf-8"
+            raw = text.encode(enc)
+        if self.has_bom and enc == "utf-8":
             raw = b"\xef\xbb\xbf" + raw
+
+        # First-save backup of the original
+        if self.path.exists() and not getattr(self, "_backed_up", False):
+            try:
+                import shutil as _sh
+                _sh.copy2(self.path, str(self.path) + ".bak")
+                self._backed_up = True
+            except Exception:
+                pass
+
         try:
             self.path.write_bytes(raw)
         except OSError as e:
+            import errno as _errno
+            if e.errno == _errno.ENOSPC:
+                return False, f"Disk full: {self.path}"
             return False, str(e)
         self.dirty = False
+        try:
+            self._last_saved_mtime = self.path.stat().st_mtime
+        except Exception:
+            self._last_saved_mtime = 0
         return True, ""
 
     def _apply_language(self):
@@ -916,6 +947,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         if self.settings.get("theme") == "high-contrast":
             self.toggle_high_contrast(True)
         self._apply_font_css()
+        GLib.timeout_add_seconds(30, self._autosave_tick)
 
         # Restore geometry
         try:
@@ -947,7 +979,15 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Save As…", self.on_save_as),
             ("Open by Path…", self.on_open_path),
             ("-", None),
+            ("Open Recent…", self.on_recent),
+            ("-", None),
             ("Revert", self.on_revert),
+            ("-", None),
+            ("Line Endings: LF",   lambda *_: self.set_line_ending("LF")),
+            ("Line Endings: CRLF", lambda *_: self.set_line_ending("CRLF")),
+            ("Line Endings: CR",   lambda *_: self.set_line_ending("CR")),
+            ("Encoding: UTF-8",    lambda *_: self.set_encoding("utf-8")),
+            ("Encoding: Latin-1",  lambda *_: self.set_encoding("latin-1")),
             ("-", None),
             ("Quit", self.on_quit),
         ]))
@@ -1029,10 +1069,30 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         to_open = list(self._initial_paths)
         if not to_open and self.settings.get("reopen_session", True):
             session = _load_json(_SESSION_FILE, {})
-            to_open = [p for p in session.get("open_files", []) if p and Path(p).exists()]
+            raw_items = session.get("open_files", [])
+            to_open = []
+            for item in raw_items:
+                if isinstance(item, dict):
+                    path = item.get("path")
+                    line = item.get("line", 0)
+                    if path and Path(path).exists():
+                        to_open.append((path, line))
+                elif isinstance(item, str):
+                    if Path(item).exists():
+                        to_open.append((item, 0))
         if to_open:
-            for path in to_open:
-                self._add_tab(path)
+            for item in to_open:
+                if isinstance(item, (list, tuple)) and len(item) >= 1:
+                    path = item[0]
+                    line = item[1] if len(item) > 1 else 0
+                    tab = self._add_tab(path)
+                    if tab and isinstance(line, int) and line > 0:
+                        try:
+                            tab.buffer.place_cursor(tab.buffer.get_iter_at_line(line))
+                        except Exception:
+                            pass
+                else:
+                    self._add_tab(item)
         else:
             self._add_tab()
         root.append(self.notebook)
@@ -1834,6 +1894,101 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         if tab:
             tab.view.grab_focus()
 
+    def on_recent(self, *_):
+        items = _load_recent()
+        win = Gtk.Window()
+        win.set_transient_for(self)
+        win.set_modal(True)
+        win.set_title("Recent Files")
+        win.set_default_size(480, 340)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_start(8); box.set_margin_end(8)
+        box.set_margin_top(8); box.set_margin_bottom(8)
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        lb = Gtk.ListBox()
+        lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        scrolled.set_child(lb)
+        box.append(scrolled)
+        if not items:
+            row = Gtk.ListBoxRow()
+            row.set_child(Gtk.Label(label="No recent files"))
+            lb.append(row)
+            lb.set_sensitive(False)
+        def _open(_lb, row):
+            path = getattr(row, "_path", None)
+            if not path: return
+            self._add_tab(path)
+            _push_recent(path)
+            win.close()
+        for path in items:
+            row = Gtk.ListBoxRow()
+            lbl = Gtk.Label(label=path)
+            lbl.set_xalign(0); lbl.set_ellipsize(3)
+            lbl.set_margin_start(6); lbl.set_margin_end(6)
+            lbl.set_margin_top(4); lbl.set_margin_bottom(4)
+            row.set_child(lbl)
+            row._path = path
+            lb.append(row)
+        lb.connect("row-activated", _open)
+        close = Gtk.Button(label="Close")
+        close.set_halign(Gtk.Align.END)
+        close.connect("clicked", lambda *_: win.close())
+        box.append(close)
+        win.set_child(box)
+        win.present()
+
+    def set_line_ending(self, mode):
+        tab = self._active_tab()
+        if not tab: return
+        tab.line_ending = mode
+        tab.dirty = True
+        tab._label.set_text(tab.title())
+
+    def set_encoding(self, enc):
+        tab = self._active_tab()
+        if not tab: return
+        tab.encoding = enc
+        if tab.path and tab.path.exists():
+            tab._load_from_disk()
+            tab.encoding = enc
+            tab.dirty = True
+            tab._label.set_text(tab.title())
+
+    def _autosave_tick(self):
+        for t in getattr(self, "tabs", []) or []:
+            if t.dirty and t.path:
+                try:
+                    t.save_to_disk()
+                    t._label.set_text(t.title())
+                except Exception:
+                    pass
+        return True
+
+    def _on_file_changed(self, monitor, file, _other, event):
+        if event not in (Gio.FileMonitorEvent.CHANGES_DONE_HINT,
+                         Gio.FileMonitorEvent.CREATED):
+            return
+        try:
+            path = file.get_path()
+        except Exception:
+            return
+        for t in self.tabs:
+            if not t.path or str(t.path) != path:
+                continue
+            # Ignore echoes of our own save
+            try:
+                if abs(t.path.stat().st_mtime - getattr(t, "_last_saved_mtime", 0)) < 0.5:
+                    return
+            except Exception:
+                pass
+            if not t.dirty:
+                try:
+                    t._load_from_disk()
+                    t._label.set_text(t.title())
+                except Exception:
+                    pass
+
     def _active_tab(self):
         idx = self.notebook.get_current_page()
         if idx < 0 or idx >= len(self.tabs):
@@ -1855,6 +2010,14 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.tabs.append(tab)
         tab._label = label
         self._apply_settings_to_tab(tab)
+        if tab.path:
+            try:
+                gfile = Gio.File.new_for_path(str(tab.path))
+                mon = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
+                mon.connect("changed", self._on_file_changed)
+                tab._monitor = mon
+            except Exception:
+                tab._monitor = None
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         key_ctrl.connect("key-pressed", self._on_auto_pair)
@@ -2079,8 +2242,17 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             self.settings["geometry"] = f"{w}x{h}"
         except Exception:
             pass
-        # Save session
-        open_files = [str(t.path) for t in self.tabs if t.path]
+        # Save session with cursor line per tab
+        open_files = []
+        for t in self.tabs:
+            if not t.path:
+                continue
+            try:
+                it = t.buffer.get_iter_at_mark(t.buffer.get_insert())
+                line = it.get_line()
+            except Exception:
+                line = 0
+            open_files.append({"path": str(t.path), "line": line})
         _save_json(_SESSION_FILE, {"open_files": open_files})
         # Save settings
         _save_settings(self.settings)
