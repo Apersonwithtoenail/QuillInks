@@ -41,19 +41,19 @@ DARK = {
 }
 
 VINTAGE = {
-    "bg":           "#2b2118",
-    "fg":           "#e8d5b7",
-    "accent":       "#d4a373",
-    "accent2":      "#8b4513",
-    "toolbar_bg":   "#3d2b1f",
-    "toolbar_fg":   "#f4e4c1",
-    "tab_bg":       "#1f1810",
-    "tab_active":   "#2b2118",
-    "tab_fg":       "#d4a373",
-    "status_bg":    "#3d2b1f",
-    "status_fg":    "#d4a373",
-    "border":       "#6b4423",
-    "hover":        "#5a3d29",
+    "bg":           "#1a1614",   # very dark warm charcoal
+    "fg":           "#e8dcc8",   # warm cream
+    "accent":       "#d4a373",   # amber
+    "accent2":      "#a57548",   # muted amber
+    "toolbar_bg":   "#1a1614",   # same as bg — flat chrome
+    "toolbar_fg":   "#e8dcc8",
+    "tab_bg":       "#121010",   # slightly darker than bg
+    "tab_active":   "#1a1614",
+    "tab_fg":       "#7a6f5e",   # muted
+    "status_bg":    "#121010",
+    "status_fg":    "#7a6f5e",
+    "border":       "#2a2420",   # subtle
+    "hover":        "#25211e",
 }
 
 
@@ -73,6 +73,117 @@ HIGH_CONTRAST = {
     "hover":        "#333333",
 }
 
+
+SOLARIZED_DARK = {
+    "bg": "#002b36", "fg": "#93a1a1", "accent": "#b58900", "accent2": "#cb4b16",
+    "toolbar_bg": "#073642", "toolbar_fg": "#eee8d5",
+    "tab_bg": "#001f27", "tab_active": "#002b36", "tab_fg": "#586e75",
+    "status_bg": "#073642", "status_fg": "#93a1a1",
+    "border": "#586e75", "hover": "#094352",
+}
+SOLARIZED_LIGHT = {
+    "bg": "#fdf6e3", "fg": "#657b83", "accent": "#268bd2", "accent2": "#d33682",
+    "toolbar_bg": "#eee8d5", "toolbar_fg": "#073642",
+    "tab_bg": "#e8e2cf", "tab_active": "#fdf6e3", "tab_fg": "#586e75",
+    "status_bg": "#eee8d5", "status_fg": "#657b83",
+    "border": "#d3cbb7", "hover": "#e4ddc7",
+}
+GRUVBOX = {
+    "bg": "#282828", "fg": "#ebdbb2", "accent": "#d79921", "accent2": "#af3a03",
+    "toolbar_bg": "#3c3836", "toolbar_fg": "#ebdbb2",
+    "tab_bg": "#1d2021", "tab_active": "#282828", "tab_fg": "#a89984",
+    "status_bg": "#3c3836", "status_fg": "#d79921",
+    "border": "#504945", "hover": "#504945",
+}
+NORD = {
+    "bg": "#2e3440", "fg": "#d8dee9", "accent": "#88c0d0", "accent2": "#5e81ac",
+    "toolbar_bg": "#3b4252", "toolbar_fg": "#eceff4",
+    "tab_bg": "#242933", "tab_active": "#2e3440", "tab_fg": "#81a1c1",
+    "status_bg": "#3b4252", "status_fg": "#88c0d0",
+    "border": "#4c566a", "hover": "#434c5e",
+}
+DRACULA = {
+    "bg": "#282a36", "fg": "#f8f8f2", "accent": "#bd93f9", "accent2": "#ff79c6",
+    "toolbar_bg": "#21222c", "toolbar_fg": "#f8f8f2",
+    "tab_bg": "#191a21", "tab_active": "#282a36", "tab_fg": "#6272a4",
+    "status_bg": "#21222c", "status_fg": "#bd93f9",
+    "border": "#44475a", "hover": "#3a3d4d",
+}
+ONE_DARK = {
+    "bg": "#282c34", "fg": "#abb2bf", "accent": "#61afef", "accent2": "#c678dd",
+    "toolbar_bg": "#21252b", "toolbar_fg": "#abb2bf",
+    "tab_bg": "#1e2126", "tab_active": "#282c34", "tab_fg": "#5c6370",
+    "status_bg": "#21252b", "status_fg": "#61afef",
+    "border": "#3e4451", "hover": "#3a3f4b",
+}
+MONOKAI = {
+    "bg": "#272822", "fg": "#f8f8f2", "accent": "#a6e22e", "accent2": "#f92672",
+    "toolbar_bg": "#1e1f1c", "toolbar_fg": "#f8f8f2",
+    "tab_bg": "#1a1b18", "tab_active": "#272822", "tab_fg": "#75715e",
+    "status_bg": "#1e1f1c", "status_fg": "#a6e22e",
+    "border": "#3e3d32", "hover": "#383830",
+}
+TOKYO_NIGHT = {
+    "bg": "#1a1b26", "fg": "#c0caf5", "accent": "#7aa2f7", "accent2": "#bb9af7",
+    "toolbar_bg": "#16161e", "toolbar_fg": "#c0caf5",
+    "tab_bg": "#13131a", "tab_active": "#1a1b26", "tab_fg": "#565f89",
+    "status_bg": "#16161e", "status_fg": "#7aa2f7",
+    "border": "#2f334d", "hover": "#292e42",
+}
+CATPPUCCIN_MOCHA = {
+    "bg": "#1e1e2e", "fg": "#cdd6f4", "accent": "#cba6f7", "accent2": "#f5c2e7",
+    "toolbar_bg": "#181825", "toolbar_fg": "#cdd6f4",
+    "tab_bg": "#11111b", "tab_active": "#1e1e2e", "tab_fg": "#7f849c",
+    "status_bg": "#181825", "status_fg": "#cba6f7",
+    "border": "#313244", "hover": "#313244",
+}
+ROSE_PINE = {
+    "bg": "#191724", "fg": "#e0def4", "accent": "#ebbcba", "accent2": "#c4a7e7",
+    "toolbar_bg": "#1f1d2e", "toolbar_fg": "#e0def4",
+    "tab_bg": "#14121c", "tab_active": "#191724", "tab_fg": "#6e6a86",
+    "status_bg": "#1f1d2e", "status_fg": "#ebbcba",
+    "border": "#403d52", "hover": "#26233a",
+}
+KANAGAWA = {
+    "bg": "#1f1f28", "fg": "#dcd7ba", "accent": "#7e9cd8", "accent2": "#957fb8",
+    "toolbar_bg": "#16161d", "toolbar_fg": "#dcd7ba",
+    "tab_bg": "#16161d", "tab_active": "#1f1f28", "tab_fg": "#727169",
+    "status_bg": "#16161d", "status_fg": "#7e9cd8",
+    "border": "#2a2a37", "hover": "#2d4f67",
+}
+NIGHT_OWL = {
+    "bg": "#011627", "fg": "#d6deeb", "accent": "#82aaff", "accent2": "#c792ea",
+    "toolbar_bg": "#01111d", "toolbar_fg": "#d6deeb",
+    "tab_bg": "#010d16", "tab_active": "#011627", "tab_fg": "#5f7e97",
+    "status_bg": "#01111d", "status_fg": "#82aaff",
+    "border": "#1d3b53", "hover": "#0b2942",
+}
+PAPER_LIGHT = {
+    "bg": "#f5f0e6", "fg": "#3d3d3d", "accent": "#d4a373", "accent2": "#8b4513",
+    "toolbar_bg": "#e8dfc8", "toolbar_fg": "#2b2118",
+    "tab_bg": "#ddd3b8", "tab_active": "#f5f0e6", "tab_fg": "#6b4423",
+    "status_bg": "#e8dfc8", "status_fg": "#6b4423",
+    "border": "#c9bda0", "hover": "#dcd2b8",
+}
+
+THEMES = {
+    "vintage-brown":    VINTAGE,
+    "dark":             DARK,
+    "high-contrast":    HIGH_CONTRAST,
+    "solarized-dark":   SOLARIZED_DARK,
+    "solarized-light":  SOLARIZED_LIGHT,
+    "gruvbox":          GRUVBOX,
+    "nord":             NORD,
+    "dracula":          DRACULA,
+    "one-dark":         ONE_DARK,
+    "monokai":          MONOKAI,
+    "tokyo-night":      TOKYO_NIGHT,
+    "catppuccin-mocha": CATPPUCCIN_MOCHA,
+    "rose-pine":        ROSE_PINE,
+    "kanagawa":         KANAGAWA,
+    "night-owl":        NIGHT_OWL,
+    "paper-light":      PAPER_LIGHT,
+}
 
 # ══════════════════════════════════════════════════════════════
 #  Config (ported from Tkinter version — pure Python, no UI)
@@ -120,6 +231,28 @@ DEFAULT_SETTINGS = {
     "reopen_session": True,
     "syntax_highlight": True,
 }
+
+
+_THEME_PROVIDER = None
+
+
+def swap_theme(theme_name):
+    """Replace the app-wide CSS provider. Idempotent — safe to call repeatedly."""
+    global _THEME_PROVIDER
+    t = THEMES.get(theme_name)
+    if t is None:
+        t = VINTAGE
+    display = Gdk.Display.get_default()
+    if _THEME_PROVIDER is not None:
+        try:
+            Gtk.StyleContext.remove_provider_for_display(display, _THEME_PROVIDER)
+        except Exception:
+            pass
+    _THEME_PROVIDER = Gtk.CssProvider()
+    _THEME_PROVIDER.load_from_string(css(t))
+    Gtk.StyleContext.add_provider_for_display(
+        display, _THEME_PROVIDER,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
 def _load_json(path, default):
@@ -202,29 +335,31 @@ def css(t):
     menubutton > button {{
         background: transparent;
         color: {t['toolbar_fg']};
-        border: 1px solid transparent;
+        border: none;
         border-radius: 8px;
-        padding: 6px 14px;
-        font-weight: 600;
-        transition: all 180ms ease-out;
+        padding: 6px 12px;
+        font-weight: 500;
+        transition: background 140ms ease-out, color 140ms ease-out;
     }}
     menubutton > button:hover {{
         background: {t['hover']};
-        border-color: {t['border']};
-        box-shadow: 0 2px 6px rgba(0,0,0,0.35),
-                    inset 0 1px 0 rgba(255,255,255,0.08);
+        color: {t['accent']};
     }}
     menubutton > button:active {{
-        background: {t['accent2']};
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.4);
+        background: {t['border']};
     }}
 
-    /* ---- the Aero button (Simple Mode) ---- */
+    /* ---- Simple Mode toggle (circular) ---- */
+    button.simple-btn.circular {{
+        min-width: 34px;
+        min-height: 34px;
+        padding: 0;
+        border-radius: 17px;
+        font-size: 13px;
+        font-weight: 600;
+    }}
     button.simple-btn {{
-        background-image: linear-gradient(to bottom,
-            {t['accent']} 0%,
-            {t['accent2']} 50%,
-            #6b3408 100%);
+        background: {t['accent']};
         color: #fef6e4;
         border: 1px solid {t['border']};
         border-radius: 14px;
@@ -956,6 +1091,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             self.toggle_high_contrast(True)
         self._apply_font_css()
         GLib.timeout_add_seconds(30, self._autosave_tick)
+        self._apply_simple_mode()
 
         # Restore geometry
         try:
@@ -973,6 +1109,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
 
         # ---- toolbar row ----
         toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._menu_btns = []
         toolbar.add_css_class("toolbar")
         toolbar.set_margin_start(8)
         toolbar.set_margin_end(8)
@@ -980,7 +1117,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         toolbar.set_margin_bottom(6)
 
         # menu bar as menu buttons
-        toolbar.append(self._make_menu("File", [
+        self._menu_btns.append(self._make_menu("File", [
             ("New", self.on_new),
             ("Open…", self.on_open),
             ("Save", self.on_save),
@@ -1000,7 +1137,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("-", None),
             ("Quit", self.on_quit),
         ]))
-        toolbar.append(self._make_menu("Edit", [
+        self._menu_btns.append(self._make_menu("Edit", [
             ("Undo", lambda *_: self._do("undo")),
             ("Redo", lambda *_: self._do("redo")),
             "-",
@@ -1028,7 +1165,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Align on :", lambda *_: self.align_on(":")),
             ("Align on #", lambda *_: self.align_on("#")),
         ]))
-        toolbar.append(self._make_menu("View", [
+        self._menu_btns.append(self._make_menu("View", [
             ("Line Numbers", self.toggle_line_numbers, True, self.settings.get("show_line_numbers", True)),
             ("Word Wrap", self.toggle_word_wrap, True, self.settings.get("wrap", False)),
             ("Highlight Current Line", self.toggle_highlight_line, True, self.settings.get("highlight_line", True)),
@@ -1052,11 +1189,27 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("High Contrast", self.toggle_high_contrast, True,
              self.settings.get("theme", "vintage-brown") == "high-contrast"),
             "-",
+            ("Theme: Vintage Brown",   lambda *_: self.set_theme("vintage-brown")),
+            ("Theme: Dark",            lambda *_: self.set_theme("dark")),
+            ("Theme: Solarized Dark",  lambda *_: self.set_theme("solarized-dark")),
+            ("Theme: Solarized Light", lambda *_: self.set_theme("solarized-light")),
+            ("Theme: Gruvbox",         lambda *_: self.set_theme("gruvbox")),
+            ("Theme: Nord",            lambda *_: self.set_theme("nord")),
+            ("Theme: Dracula",         lambda *_: self.set_theme("dracula")),
+            ("Theme: One Dark",        lambda *_: self.set_theme("one-dark")),
+            ("Theme: Monokai",         lambda *_: self.set_theme("monokai")),
+            ("Theme: Tokyo Night",     lambda *_: self.set_theme("tokyo-night")),
+            ("Theme: Catppuccin",      lambda *_: self.set_theme("catppuccin-mocha")),
+            ("Theme: Rosé Pine",       lambda *_: self.set_theme("rose-pine")),
+            ("Theme: Kanagawa",        lambda *_: self.set_theme("kanagawa")),
+            ("Theme: Night Owl",       lambda *_: self.set_theme("night-owl")),
+            ("Theme: Paper Light",     lambda *_: self.set_theme("paper-light")),
+            "-",
             ("File Tree", self.toggle_file_tree, True, False),
             ("Quick Open…", self.on_quick_open),
             ("Spell Check", self.toggle_spell_check, True, False),
         ]))
-        toolbar.append(self._make_menu("Help", [
+        self._menu_btns.append(self._make_menu("Help", [
             ("Command Palette", self.on_palette),
             ("Keyboard Shortcuts", self.on_help),
             ("Install File Association…", self.install_file_association),
@@ -1064,14 +1217,20 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("About", self.on_about),
         ]))
 
+        for _b in self._menu_btns:
+            toolbar.append(_b)
+
         # spacer
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
         toolbar.append(spacer)
 
-        # Aero-style Simple Mode button
-        self.simple_btn = Gtk.Button(label="◀ Simple Mode")
+        # Slim circular Simple Mode toggle
+        self.simple_btn = Gtk.Button(label="◀")
         self.simple_btn.add_css_class("simple-btn")
+        self.simple_btn.add_css_class("circular")
+        self.simple_btn.set_tooltip_text("Simple Mode (hide chrome)")
+        self.simple_btn.set_size_request(34, 34)
         self.simple_btn.connect("clicked", self.on_toggle_simple)
         toolbar.append(self.simple_btn)
 
@@ -1365,6 +1524,8 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("<Control>minus", self.zoom_out),
             ("<Control>0", self.zoom_reset),
             ("F11", lambda: self.toggle_fullscreen(not self.is_fullscreen())),
+            ("Escape", lambda: self._set_simple(False)
+                if self.settings.get("simple_mode") else None),
         ]
 
         # Find / Replace — pick whichever method the window exposes
@@ -2479,6 +2640,13 @@ class QuillinksWindow(Gtk.ApplicationWindow):
                          f"Created {desktop}\n\n"
                          "Right-click a text file → Open With → Quillinks")
 
+    def set_theme(self, name):
+        self.settings["theme"] = name
+        try:
+            swap_theme(name)
+        except Exception:
+            pass
+
     def _active_tab(self):
         idx = self.notebook.get_current_page()
         if idx < 0 or idx >= len(self.tabs):
@@ -2682,10 +2850,59 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         about.present()
 
     def on_toggle_simple(self, _btn):
-        if self.simple_btn.get_label() == "◀ Simple Mode":
-            self.simple_btn.set_label("▶ Full Mode")
+        self._set_simple(not self.settings.get("simple_mode", False))
+
+    def _set_simple(self, on):
+        self.settings["simple_mode"] = bool(on)
+        if on:
+            # just the editor. hide everything that isn't the text.
+            for b in getattr(self, "_menu_btns", []) or []:
+                b.set_visible(False)
+            if hasattr(self, "status") and self.status is not None:
+                self.status.set_visible(False)
+            if hasattr(self, "notebook"):
+                self.notebook.set_show_tabs(False)
+            if hasattr(self, "find_bar"):
+                try:
+                    self.find_bar.set_reveal_child(False)
+                except Exception:
+                    pass
+            if getattr(self, "_split_paned", None) is not None:
+                try:
+                    self._unsplit()
+                except Exception:
+                    pass
+            if getattr(self, "_tree_paned", None) is not None:
+                try:
+                    self._unsplit_tree()
+                except Exception:
+                    pass
+            self.simple_btn.set_label("▶")
+            try:
+                self.simple_btn.set_tooltip_text("Exit Simple Mode (Esc)")
+            except Exception:
+                pass
         else:
+            for b in getattr(self, "_menu_btns", []) or []:
+                b.set_visible(True)
+            if hasattr(self, "status") and self.status is not None:
+                self.status.set_visible(True)
+            if hasattr(self, "notebook"):
+                self.notebook.set_show_tabs(True)
             self.simple_btn.set_label("◀ Simple Mode")
+            try:
+                self.simple_btn.set_tooltip_text("Hide everything except the editor")
+            except Exception:
+                pass
+
+    def _apply_simple_mode(self):
+        # toolbar may not be built yet — wait until simple_btn exists
+        if not getattr(self, "simple_btn", None):
+            GLib.idle_add(self._apply_simple_mode)
+            return False
+        if self.settings.get("simple_mode"):
+            self._set_simple(True)
+        return False
 
     def _on_close(self, *_):
         dirty_tabs = [t for t in self.tabs if t.dirty]
