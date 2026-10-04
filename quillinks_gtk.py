@@ -942,6 +942,9 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.settings = _load_settings()
         self._initial_paths = initial_paths or []
         self._install_shortcuts()
+        _drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        _drop.connect("drop", self._on_drop)
+        self.add_controller(_drop)
         self._hc_provider = None
         self._font_provider = None
         if self.settings.get("theme") == "high-contrast":
@@ -1013,6 +1016,11 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             "-",
             ("Tabs to Spaces (4)", self.tabs_to_spaces),
             ("Spaces to Tabs", self.spaces_to_tabs),
+            "-",
+            ("Filter Lines…", self.filter_lines),
+            ("Align on =", lambda *_: self.align_on("=")),
+            ("Align on :", lambda *_: self.align_on(":")),
+            ("Align on #", lambda *_: self.align_on("#")),
         ]))
         toolbar.append(self._make_menu("View", [
             ("Line Numbers", self.toggle_line_numbers, True, self.settings.get("show_line_numbers", True)),
@@ -1039,6 +1047,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
              self.settings.get("theme", "vintage-brown") == "high-contrast"),
         ]))
         toolbar.append(self._make_menu("Help", [
+            ("Command Palette", self.on_palette),
             ("Keyboard Shortcuts", self.on_help),
             "-",
             ("About", self.on_about),
@@ -1323,6 +1332,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("<Control>o", self.on_open),
             ("<Control>s", self.on_save),
             ("<Control><Shift>o", self.on_open_path),
+            ("<Control><Shift>p", self.on_palette),
             ("<Control><Shift>s", self.on_save_as),
             ("<Control>q", self.on_quit),
             ("<Control>z", lambda: self._do("undo")),
@@ -1988,6 +1998,203 @@ class QuillinksWindow(Gtk.ApplicationWindow):
                     t._label.set_text(t.title())
                 except Exception:
                     pass
+
+    def _command_list(self):
+        # (label, callback)
+        return [
+            ("New File", self.on_new),
+            ("Open File…", self.on_open),
+            ("Open by Path…", self.on_open_path),
+            ("Open Recent…", self.on_recent),
+            ("Save", self.on_save),
+            ("Save As…", self.on_save_as),
+            ("Revert", self.on_revert),
+            ("Close Tab", lambda: self._close_tab(self._active_tab())),
+            ("Quit", self.on_quit),
+            ("Undo", lambda: self._do("undo")),
+            ("Redo", lambda: self._do("redo")),
+            ("Cut", lambda: self._do("cut")),
+            ("Copy", lambda: self._do("copy")),
+            ("Paste", lambda: self._do("paste")),
+            ("Select All", lambda: self._do("select_all")),
+            ("Find", lambda: self.find_bar.toggle_bar(replace=False)),
+            ("Replace", lambda: self.find_bar.show_bar(replace=True)),
+            ("Go to Line…", self.on_goto_line),
+            ("Duplicate Line", self.duplicate_line),
+            ("Delete Line", self.delete_line),
+            ("Toggle Comment", self.toggle_comment),
+            ("Uppercase Selection", self.uppercase_selection),
+            ("lowercase Selection", self.lowercase_selection),
+            ("Sort Lines", self.sort_lines),
+            ("Trim Trailing Whitespace", self.trim_trailing),
+            ("Tabs to Spaces", self.tabs_to_spaces),
+            ("Spaces to Tabs", self.spaces_to_tabs),
+            ("Filter Lines…", self.filter_lines),
+            ("Align on =", lambda *_: self.align_on("=")),
+            ("Align on :", lambda *_: self.align_on(":")),
+            ("Align on #", lambda *_: self.align_on("#")),
+            ("Toggle Split View", self.toggle_split),
+            ("Toggle Word Wrap", lambda *_: self.toggle_word_wrap(
+                not self.settings.get("wrap", False))),
+            ("Toggle Line Numbers", lambda *_: self.toggle_line_numbers(
+                not self.settings.get("show_line_numbers", True))),
+            ("Toggle Whitespace", lambda *_: self.toggle_whitespace(
+                not self.settings.get("show_whitespace", False))),
+            ("Toggle EOL Markers", lambda *_: self.toggle_eol_markers(
+                not self.settings.get("show_eol", False))),
+            ("Toggle Read-Only", lambda *_: self.toggle_read_only(
+                not self.settings.get("read_only", False))),
+            ("Toggle High Contrast", lambda *_: self.toggle_high_contrast(
+                self.settings.get("theme") != "high-contrast")),
+            ("Font…", self.on_font_picker),
+            ("Zoom In", self.zoom_in),
+            ("Zoom Out", self.zoom_out),
+            ("Reset Zoom", self.zoom_reset),
+            ("Fullscreen", lambda *_: self.toggle_fullscreen(not self.is_fullscreen())),
+            ("Keyboard Shortcuts", self.on_help),
+        ]
+
+    def on_palette(self, *_):
+        win = Gtk.Window()
+        win.set_transient_for(self)
+        win.set_modal(True)
+        win.set_title("Command Palette")
+        win.set_default_size(520, 420)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_start(8); box.set_margin_end(8)
+        box.set_margin_top(8); box.set_margin_bottom(8)
+
+        entry = Gtk.SearchEntry()
+        entry.set_placeholder_text("Type a command…")
+        box.append(entry)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        lb = Gtk.ListBox()
+        lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        scrolled.set_child(lb)
+        box.append(scrolled)
+
+        all_cmds = self._command_list()
+
+        def _populate(flt=""):
+            child = lb.get_first_child()
+            while child:
+                nxt = child.get_next_sibling()
+                lb.remove(child)
+                child = nxt
+            fl = flt.strip().lower()
+            for name, cb in all_cmds:
+                if fl and fl not in name.lower():
+                    continue
+                row = Gtk.ListBoxRow()
+                lbl = Gtk.Label(label=name)
+                lbl.set_xalign(0)
+                lbl.set_margin_start(6); lbl.set_margin_end(6)
+                lbl.set_margin_top(4); lbl.set_margin_bottom(4)
+                row.set_child(lbl)
+                row._cb = cb
+                lb.append(row)
+
+        def _run(_lb, row):
+            cb = getattr(row, "_cb", None)
+            win.close()
+            if cb:
+                try:
+                    cb()
+                except Exception:
+                    pass
+
+        lb.connect("row-activated", _run)
+        entry.connect("search-changed", lambda e: _populate(e.get_text()))
+        entry.connect("activate", lambda *_: (
+            _run(lb, lb.get_selected_row() or lb.get_row_at_index(0))))
+
+        _populate("")
+        win.set_child(box)
+        win.present()
+        entry.grab_focus()
+
+    def filter_lines(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        d = Adw.MessageDialog(
+            transient_for=self,
+            heading="Filter Lines",
+            body="Keep only lines containing…",
+        )
+        entry = Gtk.Entry()
+        entry.set_activates_default(True)
+        d.set_extra_child(entry)
+        d.add_response("cancel", "Cancel")
+        d.add_response("apply", "Apply")
+        d.set_response_appearance("apply", Adw.ResponseAppearance.SUGGESTED)
+        d.set_default_response("apply")
+
+        def _do(_d, r):
+            if r != "apply":
+                return
+            needle = entry.get_text()
+            if not needle:
+                return
+            b = tab.buffer
+            txt = b.get_text(b.get_start_iter(), b.get_end_iter(), False)
+            kept = [ln for ln in txt.split("\n") if needle in ln]
+            b.begin_user_action()
+            b.set_text("\n".join(kept))
+            b.end_user_action()
+
+        d.connect("response", _do)
+        d.present()
+
+    def align_on(self, sep):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        has_sel, s0, e0 = b.get_selection_bounds()
+        if not has_sel:
+            s0 = b.get_start_iter(); e0 = b.get_end_iter()
+        txt = b.get_text(s0, e0, False)
+        lines = txt.split("\n")
+        # find max pos of sep in any line
+        positions = [ln.find(sep) for ln in lines if sep in ln]
+        if not positions:
+            return
+        target = max(positions)
+        out = []
+        for ln in lines:
+            i = ln.find(sep)
+            if i < 0:
+                out.append(ln)
+                continue
+            pad = " " * (target - i)
+            out.append(ln[:i] + pad + ln[i:])
+        b.begin_user_action()
+        b.delete(s0, e0)
+        b.insert(s0, "\n".join(out))
+        b.end_user_action()
+
+    def _on_drop(self, _ctrl, value, _x, _y):
+        try:
+            if isinstance(value, Gdk.FileList):
+                for f in value.get_files():
+                    path = f.get_path()
+                    if path:
+                        self._add_tab(path)
+                        _push_recent(path)
+                return True
+            if isinstance(value, str) and value.startswith("file://"):
+                path = value[7:]
+                self._add_tab(path)
+                _push_recent(path)
+                return True
+        except Exception:
+            pass
+        return False
 
     def _active_tab(self):
         idx = self.notebook.get_current_page()
