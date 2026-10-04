@@ -814,6 +814,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         super().__init__(application=app, title="Quillinks")
         self.settings = _load_settings()
         self._initial_paths = initial_paths or []
+        self._install_shortcuts()
 
         # Restore geometry
         try:
@@ -851,11 +852,25 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         toolbar.append(self._make_menu("Edit", [
             ("Undo", lambda *_: self._do("undo")),
             ("Redo", lambda *_: self._do("redo")),
-            ("-", None),
+            "-",
             ("Cut", lambda *_: self._do("cut")),
             ("Copy", lambda *_: self._do("copy")),
             ("Paste", lambda *_: self._do("paste")),
             ("Select All", lambda *_: self._do("select_all")),
+            "-",
+            ("Go to Line…", self.on_goto_line),
+            "-",
+            ("Duplicate Line", self.duplicate_line),
+            ("Delete Line", self.delete_line),
+            ("Toggle Comment", self.toggle_comment),
+            "-",
+            ("UPPERCASE Selection", self.uppercase_selection),
+            ("lowercase Selection", self.lowercase_selection),
+            ("Sort Lines", self.sort_lines),
+            ("Trim Trailing Whitespace", self.trim_trailing),
+            "-",
+            ("Tabs to Spaces (4)", self.tabs_to_spaces),
+            ("Spaces to Tabs", self.spaces_to_tabs),
         ]))
         toolbar.append(self._make_menu("View", [
             ("Line Numbers", self.toggle_line_numbers, True, True),
@@ -876,6 +891,8 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Fullscreen", self.toggle_fullscreen, True, False),
         ]))
         toolbar.append(self._make_menu("Help", [
+            ("Keyboard Shortcuts", self.on_help),
+            "-",
             ("About", self.on_about),
         ]))
 
@@ -959,7 +976,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         vbox.set_margin_bottom(4)
         for item in items:
             # support: "label", "-", (label, cb), (label, cb, True, state)
-            if item == "-":
+            if item == "-" or (isinstance(item, tuple) and len(item) >= 1 and item[0] == "-"):
                 vbox.append(Gtk.Separator())
                 continue
             if isinstance(item, str):
@@ -1074,6 +1091,298 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         else:
             self.unfullscreen()
 
+    # ---------- Keyboard shortcuts ----------
+
+    def _install_shortcuts(self):
+        ctrl = Gtk.ShortcutController()
+        ctrl.set_scope(Gtk.ShortcutScope.GLOBAL)
+
+        def _make(keys, cb):
+            def _handle(_w, _args, _data):
+                try:
+                    cb()
+                except Exception:
+                    pass
+                return True
+            action = Gtk.CallbackAction.new(_handle, cb)
+            trigger = Gtk.ShortcutTrigger.parse_string(keys)
+            return Gtk.Shortcut.new(trigger, action)
+
+        bindings = [
+            ("<Control>t", self.on_new),
+            ("<Control>o", self.on_open),
+            ("<Control>s", self.on_save),
+            ("<Control><Shift>s", self.on_save_as),
+            ("<Control>q", self.on_quit),
+            ("<Control>z", lambda: self._do("undo")),
+            ("<Control>y", lambda: self._do("redo")),
+            ("<Control><Shift>z", lambda: self._do("redo")),
+            ("<Control><Shift>d", self.duplicate_line),
+            ("<Control>g", self.on_goto_line),
+            ("<Control>w", lambda: self._close_tab(self._active_tab())),
+            ("<Control>Tab", lambda: self.notebook.next_page()),
+            ("<Control>Page_Down", lambda: self.notebook.next_page()),
+            ("<Control><Shift>Tab", lambda: self.notebook.prev_page()),
+            ("<Control>Page_Up", lambda: self.notebook.prev_page()),
+            ("<Control><Shift>k", self.delete_line),
+            ("<Control>slash", self.toggle_comment),
+            ("<Control>equal", self.zoom_in),
+            ("<Control>plus", self.zoom_in),
+            ("<Control>minus", self.zoom_out),
+            ("<Control>0", self.zoom_reset),
+            ("F11", lambda: self.toggle_fullscreen(not self.is_fullscreen())),
+        ]
+
+        # Find / Replace — pick whichever method the window exposes
+        find_cb = (getattr(self, "on_find", None)
+                   or getattr(self, "show_find", None)
+                   or getattr(self, "_toggle_find", None))
+        if find_cb:
+            bindings.append(("<Control>f", find_cb))
+
+        for keys, cb in bindings:
+            ctrl.add_shortcut(_make(keys, cb))
+
+        self.add_controller(ctrl)
+
+    # ---------- Edit utilities ----------
+
+    def on_goto_line(self, *_):
+        tab = self._active_tab()
+        if not tab:
+            return
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading="Go to line",
+            body="Enter line number:",
+        )
+        entry = Gtk.Entry()
+        entry.set_activates_default(True)
+        dialog.set_extra_child(entry)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("go", "Go")
+        dialog.set_response_appearance("go", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("go")
+
+        def _resp(d, r):
+            if r != "go":
+                return
+            try:
+                n = int(entry.get_text().strip())
+                if n < 1:
+                    return
+                it = tab.buffer.get_iter_at_line(n - 1)
+                tab.buffer.place_cursor(it)
+                tab.view.scroll_to_iter(it, 0.1, True, 0.0, 0.0)
+            except (ValueError, IndexError):
+                pass
+
+        dialog.connect("response", _resp)
+        dialog.present()
+
+    def _line_bounds(self, tab):
+        it = tab.buffer.get_iter_at_mark(tab.buffer.get_insert())
+        start = it.copy()
+        start.set_line_offset(0)
+        end = start.copy()
+        if not end.ends_line():
+            end.forward_to_line_end()
+        return start, end
+
+    def duplicate_line(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        start, end = self._line_bounds(tab)
+        text = b.get_text(start, end, False)
+        ins = end.copy()
+        if not ins.ends_line():
+            ins.forward_to_line_end()
+        b.begin_user_action()
+        b.insert(ins, "\n" + text)
+        b.end_user_action()
+
+    def delete_line(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        start, end = self._line_bounds(tab)
+        kill = end.copy()
+        kill.forward_char()
+        b.begin_user_action()
+        b.delete(start, kill)
+        b.end_user_action()
+
+    def toggle_comment(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        has_sel, s, e = b.get_selection_bounds()
+        if not has_sel:
+            s, e = self._line_bounds(tab)
+        lstart = s.get_line()
+        lend = e.get_line()
+        all_commented = True
+        for ln in range(lstart, lend + 1):
+            it = b.get_iter_at_line(ln)
+            line_end = it.copy()
+            line_end.forward_to_line_end()
+            txt = b.get_text(it, line_end, False)
+            if txt.strip() and not txt.lstrip().startswith("#"):
+                all_commented = False
+                break
+        b.begin_user_action()
+        for ln in range(lstart, lend + 1):
+            it = b.get_iter_at_line(ln)
+            line_end = it.copy()
+            line_end.forward_to_line_end()
+            txt = b.get_text(it, line_end, False)
+            if not txt.strip():
+                continue
+            if all_commented:
+                hash_pos = txt.find("#")
+                if hash_pos >= 0:
+                    s2 = b.get_iter_at_line_offset(ln, hash_pos)
+                    e2 = b.get_iter_at_line_offset(ln, hash_pos + 1)
+                    b.delete(s2, e2)
+            else:
+                b.insert(it, "# ")
+        b.end_user_action()
+
+    def uppercase_selection(self, *_):
+        self._transform_selection(str.upper)
+
+    def lowercase_selection(self, *_):
+        self._transform_selection(str.lower)
+
+    def _transform_selection(self, fn):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        has_sel, s, e = b.get_selection_bounds()
+        if not has_sel:
+            s, e = self._line_bounds(tab)
+        txt = b.get_text(s, e, False)
+        b.begin_user_action()
+        b.delete(s, e)
+        b.insert(s, fn(txt))
+        b.end_user_action()
+
+    def sort_lines(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        has_sel, s, e = b.get_selection_bounds()
+        if not has_sel:
+            s = b.get_start_iter()
+            e = b.get_end_iter()
+        txt = b.get_text(s, e, False)
+        lines = txt.split("\n")
+        lines.sort(key=lambda x: x.lower())
+        b.begin_user_action()
+        b.delete(s, e)
+        b.insert(s, "\n".join(lines))
+        b.end_user_action()
+
+    def trim_trailing(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        txt = b.get_text(b.get_start_iter(), b.get_end_iter(), False)
+        out = "\n".join(line.rstrip() for line in txt.split("\n"))
+        if out == txt:
+            return
+        b.begin_user_action()
+        b.set_text(out)
+        b.end_user_action()
+
+    def tabs_to_spaces(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        txt = b.get_text(b.get_start_iter(), b.get_end_iter(), False)
+        out = txt.replace("\t", "    ")
+        if out == txt:
+            return
+        b.begin_user_action()
+        b.set_text(out)
+        b.end_user_action()
+
+    def spaces_to_tabs(self, *_):
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return
+        b = tab.buffer
+        txt = b.get_text(b.get_start_iter(), b.get_end_iter(), False)
+        out = txt.replace("    ", "\t")
+        if out == txt:
+            return
+        b.begin_user_action()
+        b.set_text(out)
+        b.end_user_action()
+
+    def _on_auto_pair(self, ctrl, keyval, keycode, state):
+        if state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK):
+            return False
+        name = Gdk.keyval_name(keyval)
+        pairs = {
+            "parenleft": ("(", ")"),
+            "bracketleft": ("[", "]"),
+            "braceleft": ("{", "}"),
+            "quotedbl": ('"', '"'),
+            "apostrophe": ("'", "'"),
+        }
+        if name not in pairs:
+            return False
+        op, cl = pairs[name]
+        tab = self._active_tab()
+        if not tab or not tab.view.get_editable():
+            return False
+        b = tab.buffer
+        has_sel, s, e = b.get_selection_bounds()
+        b.begin_user_action()
+        if has_sel:
+            txt = b.get_text(s, e, False)
+            b.delete(s, e)
+            b.insert(s, op + txt + cl)
+        else:
+            b.insert_at_cursor(op + cl)
+            it = b.get_iter_at_mark(b.get_insert())
+            it.backward_char()
+            b.place_cursor(it)
+        b.end_user_action()
+        return True
+
+    def on_help(self, *_):
+        text = (
+            "Ctrl+N        New file\n"
+            "Ctrl+O        Open file\n"
+            "Ctrl+S        Save\n"
+            "Ctrl+Shift+S  Save As\n"
+            "Ctrl+W        Close tab\n"
+            "Ctrl+Q        Quit\n\n"
+            "Ctrl+Z        Undo\n"
+            "Ctrl+Y        Redo\n"
+            "Ctrl+X/C/V    Cut / Copy / Paste\n"
+            "Ctrl+A        Select all\n"
+            "Ctrl+D        Duplicate line\n"
+            "Ctrl+/        Toggle comment\n"
+            "Ctrl+G        Go to line\n\n"
+            "Ctrl++/-      Zoom in / out\n"
+            "Ctrl+0        Reset zoom\n"
+            "F11           Fullscreen"
+        )
+        d = Adw.MessageDialog(transient_for=self, heading="Keyboard Shortcuts", body=text)
+        d.add_response("ok", "Close")
+        d.present()
+
     def _active_tab(self):
         idx = self.notebook.get_current_page()
         if idx < 0 or idx >= len(self.tabs):
@@ -1094,6 +1403,10 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.notebook.set_current_page(page)
         self.tabs.append(tab)
         tab._label = label
+        key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        key_ctrl.connect("key-pressed", self._on_auto_pair)
+        tab.view.add_controller(key_ctrl)
         tab.view.grab_focus()
         return tab
 
@@ -1237,41 +1550,40 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             self.simple_btn.set_label("◀ Simple Mode")
 
     def _on_close(self, *_):
-        # Check every tab for unsaved changes
         dirty_tabs = [t for t in self.tabs if t.dirty]
-        if dirty_tabs:
-            dialog = Adw.MessageDialog(
-                transient_for=self,
-                heading="Unsaved changes",
-                body=f"{len(dirty_tabs)} tab(s) have unsaved changes. Save before closing?",
-            )
-            dialog.add_response("cancel", "Cancel")
-            dialog.add_response("discard", "Discard")
-            dialog.add_response("save", "Save All")
-            dialog.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
-            dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
-            result = {"choice": "cancel"}
-
-            def _on_response(_d, resp):
-                result["choice"] = resp
-
-            dialog.connect("response", _on_response)
-            dialog.present()
-            # Since Adw.MessageDialog is async, we cancel close here and re-trigger
-            def _wait():
-                if result["choice"] == "cancel":
-                    return
-                if result["choice"] == "save":
-                    for tab in dirty_tabs:
-                        if tab.path:
-                            tab.save_to_disk()
-                        else:
-                            self._active_tab = tab
-                            self.on_save_as()
-                self._do_close()
-            GLib.timeout_add(100, _wait)
+        if not dirty_tabs:
+            self._do_close()
             return True
-        self._do_close()
+
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading="Unsaved changes",
+            body=f"{len(dirty_tabs)} tab(s) have unsaved changes. Save before closing?",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("discard", "Discard")
+        dialog.add_response("save", "Save All")
+        dialog.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def _on_response(_d, resp):
+            if resp == "cancel":
+                return
+            if resp == "save":
+                for tab in dirty_tabs:
+                    if tab.path:
+                        tab.save_to_disk()
+                    else:
+                        # Unnamed tab: fall back to Save As on the active one,
+                        # then discard the rest (rare edge case)
+                        if tab is self._active_tab():
+                            self.on_save_as()
+            self._do_close()
+
+        dialog.connect("response", _on_response)
+        dialog.present()
         return True
 
     def _do_close(self):
