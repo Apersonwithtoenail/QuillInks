@@ -229,7 +229,7 @@ DEFAULT_SETTINGS = {
     "show_eol": False,
     "show_right_margin": True,
     "read_only": False,
-    "highlight_line": True,
+    "highlight_line": False,
     "bracket_match": True,
     "auto_indent": True,
     "geometry": "1100x720",
@@ -334,6 +334,38 @@ def css(t):
         color: {t['toolbar_fg']};
         border: none;
         box-shadow: none;
+    }}
+
+    /* ---- line-number gutter: use tab_bg, kill current-line tint ---- */
+    textview > gutter,
+    textview > gutter > * ,
+    textview > gutter > text,
+    .ql-editor > gutter,
+    .ql-editor > gutter > text {{
+        background: {t['tab_bg']};
+        color: {t['tab_fg']};
+        border: none;
+        box-shadow: none;
+    }}
+    textview > gutter > text:selected,
+    textview > gutter > text:checked {{
+        background: {t['tab_bg']};
+        color: {t['accent']};
+        font-weight: 600;
+    }}
+    /* current-line highlight in the gutter — turn off the grey bar */
+    textview > text > selection:focus-within,
+    textview > gutter > text.cursor-line {{
+        background: {t['tab_bg']};
+        color: {t['accent']};
+    }}
+
+    /* ---- current-line + selection: faint amber, no grey ---- */
+    textview > text > selection,
+    textview > text > selection:focus,
+    textview > text > selection:focus-within {{
+        background: alpha({t['accent']}, 0.22);
+        color: {t['fg']};
     }}
 
     /* ---- window chrome (kills GNOME's grey bleed) ---- */
@@ -703,6 +735,7 @@ class EditorTab(Gtk.Box):
         self.view.set_right_margin_position(80)
 
         self.view.add_css_class("ql-editor")
+        self.view.add_css_class("view")
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_hexpand(True)
         scrolled.set_vexpand(True)
@@ -1193,7 +1226,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self._menu_btns.append(self._make_menu("View", [
             ("Line Numbers", self.toggle_line_numbers, True, self.settings.get("show_line_numbers", True)),
             ("Word Wrap", self.toggle_word_wrap, True, self.settings.get("wrap", False)),
-            ("Highlight Current Line", self.toggle_highlight_line, True, self.settings.get("highlight_line", True)),
+            ("Highlight Current Line", self.toggle_highlight_line, True, self.settings.get("highlight_line", False)),
             ("Right Margin (col 80)", self.toggle_right_margin, True, self.settings.get("show_right_margin", True)),
             ("Bracket Matching", self.toggle_bracket_match, True, self.settings.get("bracket_match", True)),
             ("Auto-indent", self.toggle_auto_indent, True, self.settings.get("auto_indent", True)),
@@ -1399,7 +1432,7 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         s = self.settings
         tab.view.set_show_line_numbers(bool(s.get("show_line_numbers", True)))
         tab.view.set_wrap_mode(Gtk.WrapMode.WORD if s.get("wrap") else Gtk.WrapMode.NONE)
-        tab.view.set_highlight_current_line(bool(s.get("highlight_line", True)))
+        tab.view.set_highlight_current_line(bool(s.get("highlight_line", False)))
         tab.view.set_show_right_margin(bool(s.get("show_right_margin", True)))
         tab.buffer.set_highlight_matching_brackets(bool(s.get("bracket_match", True)))
         tab.view.set_auto_indent(bool(s.get("auto_indent", True)))
