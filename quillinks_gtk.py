@@ -641,42 +641,47 @@ def _install_source_scheme():
     xml = """<?xml version="1.0" encoding="UTF-8"?>
 <style-scheme id="quillinks-vintage" name="Quillinks Vintage" version="1.0">
   <author>Apersonwithtoenail</author>
-  <description>Warm vintage brown — matches the Quillinks UI</description>
+  <description>4-colour vintage palette</description>
 
-  <color name="bg"       value="#2b2118"/>
-  <color name="fg"       value="#e8d5b7"/>
+  <!-- 4-colour palette:
+       bg = #1a1614
+       tab_bg = #0e0c0b
+       fg = #e8dcc8
+       accent = #d4a373 -->
+  <color name="bg"       value="#1a1614"/>
+  <color name="tab_bg"   value="#0e0c0b"/>
+  <color name="fg"       value="#e8dcc8"/>
+  <color name="fg_dim"   value="#7a6f5e"/>
+  <color name="accent"   value="#d4a373"/>
   <color name="keyword"  value="#d4a373"/>
-  <color name="string"   value="#9b7653"/>
-  <color name="comment"  value="#7a6a55"/>
-  <color name="number"   value="#b8956a"/>
-  <color name="function" value="#c9a961"/>
-  <color name="type"     value="#e0b47f"/>
-  <color name="variable" value="#e8d5b7"/>
-  <color name="constant" value="#c9a961"/>
-  <color name="operator" value="#a68a64"/>
-  <color name="bracket"  value="#f4e4c1"/>
+  <color name="string"   value="#b0895c"/>
+  <color name="comment"  value="#7a6f5e"/>
+  <color name="number"   value="#c9a961"/>
+  <color name="function" value="#e0b47f"/>
+  <color name="type"     value="#d4a373"/>
 
-  <style name="text"              foreground="fg"       background="bg"/>
+  <style name="text"              foreground="fg"     background="bg"/>
   <style name="def:keyword"       foreground="keyword"  bold="true"/>
   <style name="def:statement"     foreground="keyword"/>
   <style name="def:type"          foreground="type"/>
-  <style name="def:constant"      foreground="constant" bold="true"/>
+  <style name="def:constant"      foreground="accent"   bold="true"/>
   <style name="def:number"        foreground="number"/>
   <style name="def:function"      foreground="function"/>
-  <style name="def:identifier"    foreground="variable"/>
+  <style name="def:identifier"    foreground="fg"/>
   <style name="def:string"        foreground="string"/>
   <style name="def:comment"       foreground="comment"  italic="true"/>
-  <style name="def:operator"      foreground="operator"/>
+  <style name="def:operator"      foreground="fg_dim"/>
   <style name="def:special-char"  foreground="keyword"/>
   <style name="def:preprocessor"  foreground="keyword"  bold="true"/>
   <style name="def:builtin"       foreground="type"/>
 
-  <style name="def:bracket-match"  foreground="#f4e4c1" background="#6b4423" bold="true"/>
-  <style name="def:current-line"   background="#1f1810"/>
-  <style name="def:selection"      background="#6b4423"/>
-  <style name="def:right-margin"   foreground="#4a3828"/>
-  <style name="def:line-numbers"   foreground="#8b7355" background="#1f1810"/>
-  <style name="def:cursor"         foreground="#d4a373"/>
+  <style name="def:bracket-match"       foreground="fg" background="#3a2e24" bold="true"/>
+  <style name="def:selection"           background="#3a2e24"/>
+  <style name="def:right-margin"        foreground="tab_bg"/>
+  <style name="line-numbers"            foreground="fg_dim" background="tab_bg"/>
+  <style name="current-line-number"     foreground="accent" background="tab_bg" bold="true"/>
+  <style name="def:current-line"        background="bg"/>
+  <style name="def:cursor"              foreground="accent"/>
 </style-scheme>
 """
     xml_path.write_text(xml)
