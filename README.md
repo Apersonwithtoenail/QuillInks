@@ -2,7 +2,7 @@
 
 **A modern text editor for terminal and desktop — built from scratch in Python.**
 
-QuillInks ships two editions in one repo: a terminal UI built on Textual, and a desktop GUI built on Tkinter. Both share the same feature set and keyboard shortcuts.
+QuillInks ships three editions in one repo: a terminal UI built on Textual, a desktop GUI built on Tkinter, and a modern GTK4 edition. All share the same feature set and keyboard shortcuts.
 
 ## Features
 
