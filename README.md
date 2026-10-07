@@ -82,6 +82,16 @@ Install Python from python.org (Tkinter bundled), then:
     cd QuillInks
     python quillinks_gui.py
 
+### GTK4 (in progress)
+
+    git clone https://github.com/Apersonwithtoenail/QuillInks.git
+    cd QuillInks
+    python3 quillinks_gtk.py
+
+Requires GTK4 and GtkSourceView 5:
+
+    sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-gtksource-5
+
 ### TUI (terminal)
 
     git clone https://github.com/Apersonwithtoenail/QuillInks.git
