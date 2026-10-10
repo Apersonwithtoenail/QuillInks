@@ -14,7 +14,10 @@ mkdir -p "$BIN" "$ICONS" "$APPS"
 [ -f "$SCRIPT" ] || { echo "❌ missing: $SCRIPT"; exit 1; }
 chmod +x "$SCRIPT"
 
-# wrapper script — pins /usr/bin/python3 so a stray venv can't break it
+# 🔑 critical: remove any existing file/symlink FIRST, otherwise `cat >`
+# follows a symlink and clobbers the real source file.
+rm -f "$BIN/$APP_ID"
+
 cat > "$BIN/$APP_ID" <<WRAP
 #!/usr/bin/env bash
 GSK_RENDERER=cairo /usr/bin/python3 "$SCRIPT" "\$@"
@@ -38,7 +41,6 @@ Categories=Utility;TextEditor;Development;
 Keywords=editor;text;code;
 DESKTOP
 
-# refresh
 update-desktop-database "$APPS" 2>/dev/null || true
 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
