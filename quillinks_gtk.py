@@ -271,6 +271,8 @@ DEFAULT_SETTINGS = {
     "show_right_margin": True,
     "read_only": False,
     "highlight_line": False,
+    "code_folding": True,
+    "indent_guides": True,
     "bracket_match": True,
     "auto_indent": True,
     "geometry": "1100x720",
@@ -795,6 +797,18 @@ class EditorTab(Gtk.Box):
         scrolled.set_child(self.view)
         self.append(scrolled)
 
+        # Autocomplete (word-based)
+        try:
+            self.completion = self.view.get_completion()
+            if self.completion:
+                self.completion.set_auto_complete_delay(100)
+                self.words_provider = GtkSource.CompletionWords()
+                self.words_provider.register(self.buffer)
+                self.completion.add_provider(self.words_provider)
+        except Exception:
+            self.completion = None
+            self.words_provider = None
+
         self.buffer.connect("changed", self._on_changed)
 
     def _load_from_disk(self):
@@ -1283,6 +1297,8 @@ class QuillinksWindow(Gtk.ApplicationWindow):
             ("Right Margin (col 80)", self.toggle_right_margin, True, self.settings.get("show_right_margin", True)),
             ("Bracket Matching", self.toggle_bracket_match, True, self.settings.get("bracket_match", True)),
             ("Auto-indent", self.toggle_auto_indent, True, self.settings.get("auto_indent", True)),
+            ("Code Folding", self.toggle_folding, True, self.settings.get("code_folding", True)),
+            ("Indent Guides", self.toggle_indent_guides, True, self.settings.get("indent_guides", True)),
             ("Show Whitespace", self.toggle_whitespace, True, self.settings.get("show_whitespace", False)),
             ("Show EOL Markers", self.toggle_eol_markers, True, self.settings.get("show_eol", False)),
             "-",
@@ -1492,6 +1508,8 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         tab.view.set_show_line_numbers(bool(s.get("show_line_numbers", True)))
         tab.view.set_wrap_mode(Gtk.WrapMode.WORD if s.get("wrap") else Gtk.WrapMode.NONE)
         tab.view.set_highlight_current_line(bool(s.get("highlight_line", False)))
+        tab.view.set_show_folding(bool(s.get("code_folding", True)))
+        tab.view.set_show_indent_guides(bool(s.get("indent_guides", True)))
         tab.view.set_show_right_margin(bool(s.get("show_right_margin", True)))
         tab.buffer.set_highlight_matching_brackets(bool(s.get("bracket_match", True)))
         tab.view.set_auto_indent(bool(s.get("auto_indent", True)))
@@ -1537,6 +1555,16 @@ class QuillinksWindow(Gtk.ApplicationWindow):
         self.settings["bracket_match"] = bool(on)
         for t in self._tabs_iter():
             t.buffer.set_highlight_matching_brackets(bool(on))
+
+    def toggle_folding(self, on):
+        self.settings["code_folding"] = bool(on)
+        for t in self._tabs_iter():
+            t.view.set_show_folding(bool(on))
+
+    def toggle_indent_guides(self, on):
+        self.settings["indent_guides"] = bool(on)
+        for t in self._tabs_iter():
+            t.view.set_show_indent_guides(bool(on))
 
     def toggle_auto_indent(self, on):
         self.settings["auto_indent"] = bool(on)
